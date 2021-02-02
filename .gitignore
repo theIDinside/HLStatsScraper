@@ -1,0 +1,11 @@
+/target
+assets
+assets/2019_2020_NHL_Schedule.csv assets/db
+.idea/
+assets/db/
+Cargo.lock
+assets/*
+assets/db/
+assets/db/gameinfo.db
+build.rs
+.vscode/
