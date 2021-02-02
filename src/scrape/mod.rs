@@ -12,38 +12,6 @@ use crate::scrape::errors::BuilderError;
 pub type ScrapeResults<T> = Result<T, (usize, BuilderError)>;
 pub type GameResult = Result<Game, BuilderError>;
 
-
-pub struct ScrapeResult<T> {
-    results: Vec<ScrapeResults<T>>
-}
-
-impl<'a, T> ScrapeResult<T> {
-
-    pub fn new(results: Vec<ScrapeResults<T>>) -> ScrapeResult<T> {
-        ScrapeResult {
-            results
-        }
-    }
-
-    pub fn process(&'a self) -> (Vec<&'a T>, Vec<&'a (usize, BuilderError)>) {
-        let errors: Vec<&(usize, BuilderError)> = self.results.iter().filter_map(|f| f.as_ref().err()).collect();
-        let games: Vec<&T> = self.results.iter().filter_map(|f| {
-            f.as_ref().ok()
-        }).collect();
-        (games, errors)
-    }
-
-    pub fn good_results(&'a self) -> Vec<&'a T> {
-        self.results.iter().filter_map(|f| {
-            f.as_ref().ok()
-        }).collect()
-    }
-
-    pub fn errors(&'a self) -> Vec<&'a (usize, BuilderError)> {
-        self.results.iter().filter_map(|f| f.as_ref().err()).collect()
-    }
-}
-
 pub const _BASE: &'static str = "https://www.nhl.com/gamecenter/";
 pub const _VS: &'static str = "-vs-";
 

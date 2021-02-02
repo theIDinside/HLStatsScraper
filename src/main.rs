@@ -23,7 +23,7 @@ mod data;
 mod scrape;
 mod processing;
 
-use std::path::{Path};
+use std::path::{Path, PathBuf};
 use std::fs::{File, OpenOptions};
 use std::io::{Write, Read};
 use std::time::Instant;
@@ -31,13 +31,11 @@ use std::collections::HashMap;
 
 use data::{game::{Game, IntermediateGame}, gameinfo::{InternalGameInfo}, team::{construct_league, write_league_to_file}};
 use scrape::{ScrapeResults, scrape_game_infos, process_results};
-use processing::{GameInfoScraped, FileString};
+use processing::{GameInfoScraped};
 
 const BASE_URL: &'static str = "https://www.nhl.com/gamecenter";
 // 2021 season
 const FIRST_GAME: usize = 2020020001;
-const GAMES_IN_2020_SEASON: usize = 868;
-const LAST_GAME: usize = 2020020868;
 pub const GAMES_IN_SEASON: usize = 1271;
 pub static mut PROVIDED_GAMES_IN_SEASON: usize = 0;
 
@@ -87,6 +85,10 @@ fn open_db_files<'a>(db_dir: &Path, info_file: &str, results_file: &str) -> (Fil
 
 pub const FULLSEASON: std::ops::Range<usize> = (FIRST_GAME .. (GAMES_IN_SEASON + 1));
 
+// TODO: since games totals for a season has been messed up for covid, we now currently (until next season) use a public static mutable, 
+//  that gets set for amount of games, which can be read from, on a project-wide level (PROVIDED_GAMES_IN_SEASON). This will change.
+// This is to turn off warning for games_total
+#[allow(unused_assignments)]
 pub fn game_info_scrape_all(season: usize, games_in_season: Option<usize>) {
     let mut games_total = 0;
     unsafe {
@@ -104,6 +106,10 @@ pub fn game_info_scrape_all(season: usize, games_in_season: Option<usize>) {
     let game_id_chunks: Vec<Vec<usize>> = full_season_ids.chunks(100).map(|chunk| {
         chunk.into_iter().map(|v| *v).collect()
     }).collect();
+
+    // we scrape and save 100 game infos at a time. that way if something goes wrong, it doesn't go wrong at 1100 games, and then blow up only having to restart
+    // possibly could be multi threaded / co-routined using tokio or whatever it's called
+
     for (index, game_ids) in game_id_chunks.iter().enumerate() {
         println!("Scraping game info for games {}-{}", game_ids[0], game_ids[game_ids.len()-1]);
         let file_name = format!("gameinfo_partial-{}.db", index);
@@ -121,7 +127,8 @@ pub fn game_info_scrape_all(season: usize, games_in_season: Option<usize>) {
                 println!("Successfully wrote {} game infos to file {}. ({} bytes)", games.len(), &file_path.display(), data.len());
             },
             Err(e) => {
-                println!("Failed to write serialized data to {}", &file_path.display())
+                println!("Failed to write serialized data to {}. OS error message: {}", &file_path.display(), e);
+                panic!("Exiting");
             }
         }
     }
@@ -166,47 +173,61 @@ pub fn handle_serde_json_error(err: serde_json::Error) {
 
 use getopts::Options;
 
-fn print_usage(executable_name: &str, opts: Options) {
+/// Prints usage and exits (the ! means we never exit, but actually we do, by calling process::exit. This makes this function usable in match arms where we must return a value, where otherwise the compiler would
+/// call bullshit, and say we don't return a value, usable in an Err(e) arm for instance, where we don't want to panic! but we want to exit)
+fn print_usage(executable_name: &str, opts: &Options) -> ! {
     let help_message = format!("Usage: {} [options]", executable_name);
     println!("{}", opts.usage(&help_message));
+    std::process::exit(0);
+}
+
+pub fn setup_opts() -> Options {
+    let mut opts = Options::new();
+    opts.reqopt("d", "dir", "directory where assets/db and assets/db/gi_partials exist, absolute or relative. (required)", "PATH")
+        .reqopt("y", "season", "the year, which the season you want to scrape started (required)", "YEAR")
+        .optopt("g", "games", "If the season is not of standard length, pass the amount of games via this parameter (optional)", "GAMES_AMOUNT")
+        .optopt("h", "help", "Help message for data stats scraper.", "This help message");
+    opts
 }
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
-    let mut parameter_handler = Options::new();
-    parameter_handler.reqopt("d", "dir", "directory where assets/db and assets/db/gi_partials exist, absolute or relative.", "PATH");
-    parameter_handler.reqopt("y", "season", "the year, which the season you want to scrape started", "YEAR");
-    parameter_handler.optopt("g", "games", "If the season is not of standard length, pass the amount of games via this parameter", "GAMES_AMOUNT");
-
+    let parameter_handler = setup_opts();
     let matches = match parameter_handler.parse(&args[1..]) {
         Ok(m) => m,
-        Err(e) => {
-            print_usage(&args[0], parameter_handler);
-            panic!(e.to_string())
+        Err(_) => {
+            print_usage(&args[0], &parameter_handler);
         }
     };
 
+    if matches.opt_present("h") {
+        print_usage(&args[0], &parameter_handler);
+    }
+
     if matches.opt_count("d") != 1 && matches.opt_count("y") != 1 {
-        print_usage(&args[0], parameter_handler);
-        println!("");
-        // panic!("You must provide season year (the year which the season started) and the directory where assets/db && assets/db/gi_partials exist");
-        return;
+        print_usage(&args[0], &parameter_handler);
     }
 
     let year = matches.opt_str("y");
-    let root_dir = matches.opt_str("d");
+    let root_dir = matches.opt_str("d").unwrap();
     let games = matches.opt_str("g").map(|g| g.parse::<usize>().ok()).unwrap();
 
-    let db_root_dir = Path::new(DB_DIR);
+    let mut pb = PathBuf::new();
+    pb.push(root_dir);
+    pb.push(DB_DIR);
+    let db_root_dir = pb.as_path();
 
+    if !db_root_dir.exists() {
+        std::fs::create_dir(db_root_dir).expect(&format!("Failed to create directory {}", db_root_dir.to_str().unwrap()));
+    }
+
+    println!("Set database root directory: {}", db_root_dir.display());
     let hsviewer_directory_string = args.get(0).expect("You need to provide directory of the HSViewer client application.");
     let hsviewer_binary_dir = Path::new(hsviewer_directory_string);
     if !hsviewer_binary_dir.exists() {
         panic!("Directory doesn't exist!");
     }
 
-    println!("You provided {} as directory containing hsviewer binary.", hsviewer_binary_dir.canonicalize().unwrap().display());
-    println!("This command needs to be run from within the client application folder.");
     match write_league_to_file(construct_league(), Path::new("./assets/db/teams.db")) {
         Ok(bytes_written) => {
             println!("Wrote teams to DB file, {} bytes", bytes_written);
@@ -244,7 +265,7 @@ fn main() {
                         println!("Successfully wrote serialized data of fully compiled Game Info db");
                     },
                     Err(e) => {
-
+                        panic!("Failed to write serialized data to disk. Error message returned from OS: {}", e);
                     }
                 }
             } else {
@@ -273,7 +294,7 @@ fn main() {
                     if bytes <= 2 {
                         let refs = season.iter().map(|x| x).collect();
                         let result = scrape_and_log(&refs);
-                        let (game_results, errors) = scrape::process_gr_results(&result);
+                        let (game_results, _errors) = scrape::process_gr_results(&result);
                         println!("Total game results scraped: {}", &game_results.len());
                         let data = serde_json::to_string(&game_results).expect("Couldn't serialize game results data");
                         match game_results_file.write_all(data.as_bytes()) {
@@ -281,7 +302,8 @@ fn main() {
                                 println!("Successfully wrote serialized data to file");
                             },
                             Err(e) => {
-                                println!("Could not write serialized data to file");
+                                println!("Could not write serialized data to file. Error: {}", e);
+                                panic!("Exiting");
                             }
                         }
                     } else { //
@@ -302,7 +324,7 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use crate::scrape::{scrape_game_infos, process_results};
-    use std::path::Path;
+    use std::path::{Path};
     use std::fs::OpenOptions;
     use std::io::Write;
     

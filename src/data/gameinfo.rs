@@ -20,23 +20,6 @@ impl PartialEq for GameInfo {
     }
 }
 
-impl GameInfo {
-    pub fn get_date_tuple(&self) -> (u32, u32, u32) {
-        (self.date.day, self.date.month, self.date.year as u32)
-    }
-
-    pub fn get_id(&self) -> usize { self.game_id }
-
-    pub fn new(home_team: String, away_team: String, game_id: usize, date: CalendarDate) -> GameInfo {
-        GameInfo {
-            home_team,
-            away_team,
-            game_id,
-            date
-        }
-    }
-}
-
 /// The data type used for our "In memory" database. It only uses unsigned integers
 /// because that will save a lot of memory, instead of having each of the 1270 game info objects
 /// contain 2 heap allocated strings, we now only contain 6 usize numbers, and everything can be

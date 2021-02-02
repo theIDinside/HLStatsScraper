@@ -1,7 +1,7 @@
 use std::convert::TryFrom;
 use serde::{Serialize, Serializer};
 use serde::ser::SerializeStruct;
-use crate::data::team::{get_team_name, get_abbreviated_name};
+use crate::data::team::{get_abbreviated_name};
 
 #[derive(Copy, Clone, Debug, Serialize, Deserialize)]
 pub struct Time {
@@ -245,15 +245,6 @@ impl GoalBuilder {
             false
         }
     }
-
-    pub fn is_unsuccessful_ps(&self) -> bool {
-        if let Some(goal_number) = self.goal_number {
-            goal_number == 0
-        } else {
-            false
-        }
-    }
-
 }
 
 #[derive(Copy, Clone, Debug, Serialize, Deserialize)]
