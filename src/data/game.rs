@@ -1,5 +1,5 @@
 use super::gameinfo::{InternalGameInfo};
-use super::stats::{Score, Goal, Shots, PowerPlays, TakeAways, GiveAways, FaceOffs, DeserializeGoal, DeserializePeriod};
+use super::stats::{Score, Goal, Shots, PowerPlays, TakeAways, GiveAways, FaceOffs, DeserializeGoal};
 use crate::data::stats::PowerPlay;
 use crate::scrape::errors::BuilderError;
 

@@ -3,9 +3,7 @@ use reqwest::Url;
 use crate::scrape::{convert_fwd_slashes, _BASE};
 use crate::scrape::errors::BuilderError;
 
-const SEASON_STARTING_YEAR: usize = 2020;
-
-pub static mut YEAR: usize = 2020;
+pub static mut YEAR: usize = 1800;
 
 /// The actual GameInfo object that we send to the client "over the wire".
 #[derive(Eq, Hash, Clone, Debug, Serialize, Deserialize)]
@@ -51,9 +49,9 @@ pub struct InternalGameInfo {
     date:  CalendarDate
 }
 
-const SUMMARY_SEASON_IDENTIFIER_FORMAT: usize = SEASON_STARTING_YEAR * 1000000;
-
-
+unsafe fn format_season_summary() -> usize {
+    YEAR * 1000000
+}
 
 impl InternalGameInfo {
 
@@ -109,22 +107,22 @@ impl InternalGameInfo {
 
     pub fn get_event_summary_url(&self) -> String {
         unsafe {
-            format!("http://www.nhl.com/scores/htmlreports/{}{}/ES0{}.HTM", YEAR, YEAR + 1, self.gid - SUMMARY_SEASON_IDENTIFIER_FORMAT)
+            format!("http://www.nhl.com/scores/htmlreports/{}{}/ES0{}.HTM", YEAR, YEAR + 1, self.gid - format_season_summary())
         }
     }
 
     pub fn get_game_summary_url(&self) -> String {
         unsafe {
-            format!("http://www.nhl.com/scores/htmlreports/{}{}/GS0{}.HTM",  YEAR, YEAR + 1, self.gid - SUMMARY_SEASON_IDENTIFIER_FORMAT)
+            format!("http://www.nhl.com/scores/htmlreports/{}{}/GS0{}.HTM",  YEAR, YEAR + 1, self.gid - format_season_summary())
         }
     }
 
     pub fn get_shot_summary_url(&self) -> String {
         unsafe {
-            format!("http://www.nhl.com/scores/htmlreports/{}{}/SS0{}.HTM",  YEAR, YEAR+1, self.gid - SUMMARY_SEASON_IDENTIFIER_FORMAT) 
+            format!("http://www.nhl.com/scores/htmlreports/{}{}/SS0{}.HTM",  YEAR, YEAR+1, self.gid - format_season_summary()) 
         }
     }
-    
+
     pub fn get_home_team(&self) -> &String { &self.home }
     pub fn get_away_team(&self) -> &String { &self.away }
 }

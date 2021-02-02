@@ -26,7 +26,12 @@ impl From<serde_json::Error> for GameInfoScraped {
 fn check_missing(games: &Vec<InternalGameInfo>) -> Option<Vec<usize>> {
     let mut missing_games = Vec::new();
     let ids: Vec<usize> = games.iter().map(|x| x.get_id()).collect();
-    for game in crate::FULLSEASON {
+
+    let ALL_GAMES = unsafe {
+        crate::season_id_formatter(crate::data::gameinfo::YEAR) .. crate::PROVIDED_GAMES_IN_SEASON + 1
+    };
+
+    for game in ALL_GAMES {
         if !ids.contains(&game) {
             missing_games.push(game);
         }

@@ -38,11 +38,12 @@ const BASE_URL: &'static str = "https://www.nhl.com/gamecenter";
 const FIRST_GAME: usize = 2020020001;
 const GAMES_IN_2020_SEASON: usize = 868;
 const LAST_GAME: usize = 2020020868;
-const GAMES_IN_SEASON: usize = 1271;
+pub const GAMES_IN_SEASON: usize = 1271;
+pub static mut PROVIDED_GAMES_IN_SEASON: usize = 0;
 
-
-pub fn season_id_formatter(year_season_begins: usize) -> usize {
-    1020001 * year_season_begins
+/// if year=2020, returns like 2020020001
+pub fn season_id_formatter(year_season_begins: usize) -> usize {   
+    1000000 * year_season_begins + 20001
 }
 
 const DB_DIR: &'static str = "./assets/db";
@@ -87,13 +88,17 @@ fn open_db_files<'a>(db_dir: &Path, info_file: &str, results_file: &str) -> (Fil
 pub const FULLSEASON: std::ops::Range<usize> = (FIRST_GAME .. (GAMES_IN_SEASON + 1));
 
 pub fn game_info_scrape_all(season: usize, games_in_season: Option<usize>) {
+    let mut games_total = 0;
     unsafe {
         data::gameinfo::YEAR = season;
+        PROVIDED_GAMES_IN_SEASON = games_in_season.unwrap_or(GAMES_IN_SEASON);
+        games_total = GAMES_IN_SEASON;
     }
-    println!("Scraping game info for season {} - {} games", season, games_in_season.unwrap_or(GAMES_IN_SEASON));
+
+    println!("Scraping game info for season {} - {} games", season, games_in_season.unwrap_or(games_total));
     // Begin scraping of all game info
     let first_game = season_id_formatter(season);
-    let full_season_ids: Vec<usize> = (first_game .. (first_game + games_in_season.unwrap_or(GAMES_IN_SEASON) + 1)).collect();
+    let full_season_ids: Vec<usize> = (first_game .. (first_game + games_in_season.unwrap_or(games_total) + 1)).collect();
     println!("There is no saved Game Info data. Begin scraping of Game Info DB...");
     // We split the games into 100-game chunks, so if anything goes wrong, we at least write 100 games to disk at a time
     let game_id_chunks: Vec<Vec<usize>> = full_season_ids.chunks(100).map(|chunk| {
