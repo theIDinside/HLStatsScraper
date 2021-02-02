@@ -5,6 +5,8 @@ use crate::scrape::errors::BuilderError;
 
 const SEASON_STARTING_YEAR: usize = 2020;
 
+pub static mut YEAR: usize = 2020;
+
 /// The actual GameInfo object that we send to the client "over the wire".
 #[derive(Eq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct GameInfo {
@@ -106,21 +108,23 @@ impl InternalGameInfo {
     }
 
     pub fn get_event_summary_url(&self) -> String {
-        format!("http://www.nhl.com/scores/htmlreports/{}{}/ES0{}.HTM", SEASON_STARTING_YEAR, SEASON_STARTING_YEAR + 1, self.gid - SUMMARY_SEASON_IDENTIFIER_FORMAT)
+        unsafe {
+            format!("http://www.nhl.com/scores/htmlreports/{}{}/ES0{}.HTM", YEAR, YEAR + 1, self.gid - SUMMARY_SEASON_IDENTIFIER_FORMAT)
+        }
     }
 
     pub fn get_game_summary_url(&self) -> String {
-        format!("http://www.nhl.com/scores/htmlreports/{}{}/GS0{}.HTM",  SEASON_STARTING_YEAR, SEASON_STARTING_YEAR + 1, self.gid - SUMMARY_SEASON_IDENTIFIER_FORMAT)
+        unsafe {
+            format!("http://www.nhl.com/scores/htmlreports/{}{}/GS0{}.HTM",  YEAR, YEAR + 1, self.gid - SUMMARY_SEASON_IDENTIFIER_FORMAT)
+        }
     }
 
     pub fn get_shot_summary_url(&self) -> String {
-        format!("http://www.nhl.com/scores/htmlreports/{}{}/SS0{}.HTM",  SEASON_STARTING_YEAR, SEASON_STARTING_YEAR+1, self.gid - SUMMARY_SEASON_IDENTIFIER_FORMAT)
+        unsafe {
+            format!("http://www.nhl.com/scores/htmlreports/{}{}/SS0{}.HTM",  YEAR, YEAR+1, self.gid - SUMMARY_SEASON_IDENTIFIER_FORMAT) 
+        }
     }
-
+    
     pub fn get_home_team(&self) -> &String { &self.home }
     pub fn get_away_team(&self) -> &String { &self.away }
-
 }
-
-
-

@@ -14,6 +14,8 @@ extern crate serde;
 extern crate serde_json;
 extern crate scraper;
 extern crate select;
+extern crate getopts;
+
 #[macro_use] extern crate serde_derive;
 extern crate pbr;
 
@@ -22,11 +24,10 @@ mod scrape;
 mod processing;
 
 use std::path::{Path};
-use std::fs::File;
+use std::fs::{File, OpenOptions};
 use std::io::{Write, Read};
 use std::time::Instant;
 use std::collections::HashMap;
-use std::fs::OpenOptions;
 
 use data::{game::{Game, IntermediateGame}, gameinfo::{InternalGameInfo}, team::{construct_league, write_league_to_file}};
 use scrape::{ScrapeResults, scrape_game_infos, process_results};
@@ -35,9 +36,14 @@ use processing::{GameInfoScraped, FileString};
 const BASE_URL: &'static str = "https://www.nhl.com/gamecenter";
 // 2021 season
 const FIRST_GAME: usize = 2020020001;
+const GAMES_IN_2020_SEASON: usize = 868;
 const LAST_GAME: usize = 2020020868;
-const GAMES_IN_SEASON: usize = LAST_GAME - 2020020000;
+const GAMES_IN_SEASON: usize = 1271;
 
+
+pub fn season_id_formatter(year_season_begins: usize) -> usize {
+    1020001 * year_season_begins
+}
 
 const DB_DIR: &'static str = "./assets/db";
 
@@ -80,9 +86,14 @@ fn open_db_files<'a>(db_dir: &Path, info_file: &str, results_file: &str) -> (Fil
 
 pub const FULLSEASON: std::ops::Range<usize> = (FIRST_GAME .. (GAMES_IN_SEASON + 1));
 
-pub fn game_info_scrape_all() {
+pub fn game_info_scrape_all(season: usize, games_in_season: Option<usize>) {
+    unsafe {
+        data::gameinfo::YEAR = season;
+    }
+    println!("Scraping game info for season {} - {} games", season, games_in_season.unwrap_or(GAMES_IN_SEASON));
     // Begin scraping of all game info
-    let full_season_ids: Vec<usize> = (FIRST_GAME .. (FIRST_GAME + GAMES_IN_SEASON + 1)).collect();
+    let first_game = season_id_formatter(season);
+    let full_season_ids: Vec<usize> = (first_game .. (first_game + games_in_season.unwrap_or(GAMES_IN_SEASON) + 1)).collect();
     println!("There is no saved Game Info data. Begin scraping of Game Info DB...");
     // We split the games into 100-game chunks, so if anything goes wrong, we at least write 100 games to disk at a time
     let game_id_chunks: Vec<Vec<usize>> = full_season_ids.chunks(100).map(|chunk| {
@@ -148,12 +159,41 @@ pub fn handle_serde_json_error(err: serde_json::Error) {
     panic!("De-serializing data failed. Make sure data is in the correct format, or delete all current data and re-scrape everything (Warning, may take a long time)");
 }
 
+use getopts::Options;
 
+fn print_usage(executable_name: &str, opts: Options) {
+    let help_message = format!("Usage: {} [options]", executable_name);
+    println!("{}", opts.usage(&help_message));
+}
 
 fn main() {
+    let args: Vec<String> = std::env::args().collect();
+    let mut parameter_handler = Options::new();
+    parameter_handler.reqopt("d", "dir", "directory where assets/db and assets/db/gi_partials exist, absolute or relative.", "PATH");
+    parameter_handler.reqopt("y", "season", "the year, which the season you want to scrape started", "YEAR");
+    parameter_handler.optopt("g", "games", "If the season is not of standard length, pass the amount of games via this parameter", "GAMES_AMOUNT");
+
+    let matches = match parameter_handler.parse(&args[1..]) {
+        Ok(m) => m,
+        Err(e) => {
+            print_usage(&args[0], parameter_handler);
+            panic!(e.to_string())
+        }
+    };
+
+    if matches.opt_count("d") != 1 && matches.opt_count("y") != 1 {
+        print_usage(&args[0], parameter_handler);
+        println!("");
+        // panic!("You must provide season year (the year which the season started) and the directory where assets/db && assets/db/gi_partials exist");
+        return;
+    }
+
+    let year = matches.opt_str("y");
+    let root_dir = matches.opt_str("d");
+    let games = matches.opt_str("g").map(|g| g.parse::<usize>().ok()).unwrap();
+
     let db_root_dir = Path::new(DB_DIR);
 
-    let args: Vec<String> = std::env::args().skip(1).collect();
     let hsviewer_directory_string = args.get(0).expect("You need to provide directory of the HSViewer client application.");
     let hsviewer_binary_dir = Path::new(hsviewer_directory_string);
     if !hsviewer_binary_dir.exists() {
@@ -179,7 +219,7 @@ fn main() {
     let game_info_db = processing::process_game_infos(&db_root_dir);
     match game_info_db {
         GameInfoScraped::None(None) => {
-            game_info_scrape_all();
+            game_info_scrape_all(year.unwrap().parse::<usize>().unwrap(), games);
         },
         GameInfoScraped::None(Some(serde_err)) => {
             // An error occured while trying to de-serialize stored data. we just panic for now

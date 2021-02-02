@@ -101,11 +101,7 @@ fn scrape_game(client: &reqwest::blocking::Client, game_info: &InternalGameInfo)
                 return Err(BuilderError::REQWEST(e))
             }
         };
-/*
-        let game_html_data = client.get(&game_info.get_game_summary_url()).send()?.text()?;
-        let event_html_data = client.get(&game_info.get_event_summary_url()).send()?.text()?;
-        let shots_html_data = client.get(&game_info.get_shot_summary_url()).send()?.text()?;
-*/
+
         let evt_doc = Document::from(event_html_data.as_ref());
         let game_doc = Document::from(game_html_data.as_ref());
         let shots_doc = Document::from(shots_html_data.as_ref());
