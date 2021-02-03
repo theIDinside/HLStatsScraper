@@ -81,12 +81,12 @@ pub fn game_info_scrape_all(scrape_config: &ScrapeConfig) {
     println!("Scraping game info for season {} - {} games", season, games_in_season);
     // Begin scraping of all game info
     let full_season_ids: Vec<usize> = scrape_config.season_ids_range().collect();
-    println!("There is no saved Game Info data. Begin scraping of Game Info DB...");
+    println!("There is no saved Game Info data. Begin scraping of Game Info DB of season of {} games", full_season_ids.len());
     // We split the games into 100-game chunks, so if anything goes wrong, we at least write 100 games to disk at a time
     let game_id_chunks: Vec<Vec<usize>> = full_season_ids.chunks(100).map(|chunk| {
         chunk.into_iter().map(|v| *v).collect()
     }).collect();
-
+    assert_eq!(game_id_chunks[0].len(), 100);
     // we scrape and save 100 game infos at a time. that way if something goes wrong, it doesn't go wrong at 1100 games, and then blow up only having to restart
     // possibly could be multi threaded / co-routined using tokio or whatever it's called
 
@@ -94,8 +94,11 @@ pub fn game_info_scrape_all(scrape_config: &ScrapeConfig) {
         println!("Scraping game info for games {}-{}", game_ids[0], game_ids[game_ids.len()-1]);
         let file_name = format!("gameinfo_partial-{}.db", index);
         let file_path = scrape_config.db_asset_dir().join(&file_name);
-        let result = scrape_game_infos(&game_ids);
-        let (games, _errors) = process_results(&result);
+        let mut result = scrape_game_infos(&game_ids);
+        let (games, _errors) = process_results(&mut result);
+        for g in &games {
+            print!("{}: {:?}", g.get_id(), g.get_date_tuple());
+        }
         let data = serde_json::to_string(&games).unwrap();            
         let mut info_file = OpenOptions::new()
         .read(true)
@@ -124,8 +127,8 @@ pub fn game_info_scrape_missing(scrape_config: &ScrapeConfig, missing_games: Vec
     for (index, game_ids) in chunks.iter().enumerate() {
         let file_name = format!("gameinfo_partial-{}.db", index + partials_file_count);
         let file_path = &partials_dir.join(&file_name);
-        let result = scrape_game_infos(&game_ids);
-        let (games, _errors) = process_results(&result);
+        let mut result = scrape_game_infos(&game_ids);
+        let (games, _errors) = process_results(&mut result);
         let data = serde_json::to_string(&game_ids).unwrap();
         let mut info_file = OpenOptions::new()
         .read(true)
@@ -175,7 +178,7 @@ fn main() {
     let dbroot = scrape_config.db_asset_dir();
     let db_root_dir = dbroot.as_path();
     if !db_root_dir.exists() {
-        std::fs::create_dir(db_root_dir).expect(&format!("Failed to create directory {}", db_root_dir.to_str().unwrap()));
+        std::fs::create_dir_all(db_root_dir).expect(&format!("Failed to create directory {}", db_root_dir.to_str().unwrap()));
     }
 
     println!("Set database root directory: {}", db_root_dir.display());

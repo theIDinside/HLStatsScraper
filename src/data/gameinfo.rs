@@ -27,7 +27,39 @@ pub struct InternalGameInfo {
     home:  String,
     away:  String,
     gid:   usize,
-    date:  CalendarDate
+    pub date:  CalendarDate
+}
+
+impl Eq for InternalGameInfo {}
+
+impl std::cmp::Ord for InternalGameInfo {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        use std::cmp::Ordering;
+        let gid_cmp = self.gid.cmp(&other.gid);
+        let date_cmp = self.date.cmp(&other.date);
+        match gid_cmp {
+            Ordering::Less if date_cmp == Ordering::Greater => {
+                println!("GID was less but Date was greater: {}/{}", self.get_id(), other.get_id());
+                Ordering::Greater
+            },
+            Ordering::Greater if date_cmp == Ordering::Less => {
+                Ordering::Less
+            }
+            _ => gid_cmp,
+        }
+    }
+}
+
+impl PartialEq for InternalGameInfo {
+    fn eq(&self, other: &Self) -> bool {
+        self.gid == other.gid
+    }
+}
+
+impl PartialOrd for InternalGameInfo {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 fn format_season_summary(season: usize) -> usize {

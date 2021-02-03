@@ -338,16 +338,21 @@ pub fn scrape_game_infos(game_ids: &Vec<usize>) -> Vec<ScrapeResults<InternalGam
         }
         pb.inc();
     }
-    pb.finish_print(format!("Done scraping game info for {} games.", count).as_ref());
+    pb.finish_print(format!("Done scraping game info for {} games. Sorting", count).as_ref());
     result
 }
 
-pub fn process_results(results: &Vec<ScrapeResults<InternalGameInfo>>) -> (Vec<&InternalGameInfo>, Vec<&(usize, BuilderError)>)
+/// Returns a tuple of "ok" scrapes and error's
+/// The "ok" scrapes, are sorted by Game ID & CalendarDate. Since some games can be postponed, they are sorted by CalendarDate then GameID
+pub fn process_results(results: &mut Vec<ScrapeResults<InternalGameInfo>>) -> (Vec<&InternalGameInfo>, Vec<&(usize, BuilderError)>)
 {
     let errors: Vec<&(usize, BuilderError)> = results.iter().filter_map(|f| f.as_ref().err()).collect();
-    let games: Vec<&InternalGameInfo> = results.iter().filter_map(|f| {
+    let mut games: Vec<&InternalGameInfo> = results.iter().filter_map(|f| {
         f.as_ref().ok()
     }).collect();
+    games.sort_by(|a, b| {
+        a.cmp(b)
+    });
     (games, errors)
 }
 
