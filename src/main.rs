@@ -7,7 +7,7 @@ extern crate getopts;       // for getting command line options
 extern crate chrono;        // for getting time and date - will eventually be replaced by custom library call to C, which will be OS specific for Linux and Windows. Because fuck Mac.
 
 #[macro_use] extern crate serde_derive;
-extern crate pbr;
+extern crate pbr;           // progress bar in the terminal/console
 
 mod data;
 mod scrape;
@@ -25,7 +25,9 @@ use processing::{GameInfoScraped};
 
 impl processing::FileString for std::fs::File {
     fn string_read(&mut self) -> processing::FileResult {
+        let buf_sz = self.metadata().expect("Failed to take metadata").len();
         let mut buf = String::new();
+        buf.reserve(buf_sz as usize);
         self.read_to_string(&mut buf)?;
         Ok(buf)
     }
@@ -273,7 +275,6 @@ mod tests {
     use std::path::{Path};
     use std::fs::OpenOptions;
     use std::io::Write;
-    
 
     #[test]
     fn scrape_and_serialize_5_games() {    
