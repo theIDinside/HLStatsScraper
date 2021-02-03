@@ -37,14 +37,63 @@ const BASE_URL: &'static str = "https://www.nhl.com/gamecenter";
 // 2021 season
 const FIRST_GAME: usize = 2020020001;
 pub const GAMES_IN_SEASON: usize = 1271;
-pub static mut PROVIDED_GAMES_IN_SEASON: usize = 0;
+
 
 /// if year=2020, returns like 2020020001
-pub fn season_id_formatter(year_season_begins: usize) -> usize {   
+pub fn first_game_id_of_season(year_season_begins: usize) -> usize {   
     1000000 * year_season_begins + 20001
 }
 
-const DB_DIR: &'static str = "./assets/db";
+const DB_DIR: &'static str = "assets/db";
+
+
+pub struct ScrapeConfig {
+    root_directory: PathBuf,
+    season: usize, /// The year the season "started" (or was supposed to start, in this case)
+    season_length: usize,
+}
+
+impl ScrapeConfig {
+    pub fn new(args_: std::env::Args) -> ScrapeConfig {
+        let args: Vec<String> = args_.collect();
+        let parameter_handler = setup_opts();
+        let matches = match parameter_handler.parse(&args[1..]) {
+            Ok(m) => m,
+            Err(_) => {
+                print_usage(&args[0], &parameter_handler);
+            }
+        };      
+    
+        if matches.opt_present("h") {
+            print_usage(&args[0], &parameter_handler);
+        }
+    
+        if matches.opt_count("d") != 1 && matches.opt_count("y") != 1 {
+            print_usage(&args[0], &parameter_handler);
+        }
+    
+        let year = matches.opt_str("y");
+        let root_dir = matches.opt_str("d").unwrap();
+        let games = matches.opt_str("g").map(|g| g.parse::<usize>().ok()).unwrap();
+
+        ScrapeConfig {
+            root_directory: PathBuf::from(&root_dir),
+            season: year.unwrap().parse::<usize>().unwrap(),
+            season_length: games.unwrap_or(GAMES_IN_SEASON)
+        }
+    }
+
+    pub fn db_asset_dir(&self) -> PathBuf {
+        self.root_directory.join(DB_DIR)
+    }
+
+    pub fn season_ids_range(&self) -> std::ops::Range<usize> {
+        first_game_id_of_season(self.season_start()) .. self.season_games_len() + 1
+    }
+
+    pub fn season_start(&self) -> usize { self.season }
+    pub fn season_games_len(&self) -> usize { self.season_length }
+}
 
 impl processing::FileString for std::fs::File {
     fn string_read(&mut self) -> processing::FileResult {
@@ -55,10 +104,10 @@ impl processing::FileString for std::fs::File {
 }
 
 /// Utility wrapper around scraping, so that main() doesn't get cluttered with calls to println!
-fn scrape_and_log(games: &Vec<&InternalGameInfo>) -> Vec<ScrapeResults<Game>> {
+fn scrape_and_log(games: &Vec<&InternalGameInfo>, scrape_config: &ScrapeConfig) -> Vec<ScrapeResults<Game>> {
     println!("Beginning scraping of {} games", games.len());
     let scrape_begin_time = Instant::now();
-    let game_results = scrape::scrape_game_results(&games);
+    let game_results = scrape::scrape_game_results(&games, scrape_config);
     let scrape_time_elapsed = scrape_begin_time.elapsed().as_millis();
     println!("Tried scraping {} games in {}ms", game_results.len(), scrape_time_elapsed);
     game_results
@@ -83,24 +132,19 @@ fn open_db_files<'a>(db_dir: &Path, info_file: &str, results_file: &str) -> (Fil
     (game_info, game_results)
 }
 
-pub const FULLSEASON: std::ops::Range<usize> = (FIRST_GAME .. (GAMES_IN_SEASON + 1));
-
 // TODO: since games totals for a season has been messed up for covid, we now currently (until next season) use a public static mutable, 
 //  that gets set for amount of games, which can be read from, on a project-wide level (PROVIDED_GAMES_IN_SEASON). This will change.
 // This is to turn off warning for games_total
 #[allow(unused_assignments)]
-pub fn game_info_scrape_all(season: usize, games_in_season: Option<usize>) {
+pub fn game_info_scrape_all(scrape_config: &ScrapeConfig) {
     let mut games_total = 0;
-    unsafe {
-        data::gameinfo::YEAR = season;
-        PROVIDED_GAMES_IN_SEASON = games_in_season.unwrap_or(GAMES_IN_SEASON);
-        games_total = GAMES_IN_SEASON;
-    }
+    let season = scrape_config.season_start();
+    let games_in_season = scrape_config.season_games_len();
 
-    println!("Scraping game info for season {} - {} games", season, games_in_season.unwrap_or(games_total));
+    println!("Scraping game info for season {} - {} games", season, games_in_season);
     // Begin scraping of all game info
-    let first_game = season_id_formatter(season);
-    let full_season_ids: Vec<usize> = (first_game .. (first_game + games_in_season.unwrap_or(games_total) + 1)).collect();
+    let first_game = first_game_id_of_season(season);
+    let full_season_ids: Vec<usize> = scrape_config.season_ids_range().collect();
     println!("There is no saved Game Info data. Begin scraping of Game Info DB...");
     // We split the games into 100-game chunks, so if anything goes wrong, we at least write 100 games to disk at a time
     let game_id_chunks: Vec<Vec<usize>> = full_season_ids.chunks(100).map(|chunk| {
@@ -134,13 +178,11 @@ pub fn game_info_scrape_all(season: usize, games_in_season: Option<usize>) {
     }
 }
 
-pub fn game_info_scrape_missing(db_root_dir: &Path, missing_games: Vec<usize>) -> Vec<InternalGameInfo> {
+pub fn game_info_scrape_missing(scrape_config: &ScrapeConfig, missing_games: Vec<usize>) -> Vec<InternalGameInfo> {
     println!("Scraping remaining {} game info items", missing_games.len());
     let chunks: Vec<Vec<usize>> = missing_games.chunks(100).map(|chunk| chunk.iter().map(|val| *val).collect()).collect();
     let mut scraped_missing: Vec<Vec<InternalGameInfo>> = Vec::new();
-
-
-    let partials_dir = db_root_dir.join("gi_partials");
+    let partials_dir = scrape_config.db_asset_dir().join("gi_partials");
     let partials_file_count = std::fs::read_dir(&partials_dir).expect("Could not open gi_partials directory").count();
     
     for (index, game_ids) in chunks.iter().enumerate() {
@@ -191,42 +233,16 @@ pub fn setup_opts() -> Options {
 }
 
 fn main() {
-    let args: Vec<String> = std::env::args().collect();
-    let parameter_handler = setup_opts();
-    let matches = match parameter_handler.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(_) => {
-            print_usage(&args[0], &parameter_handler);
-        }
-    };
 
-    if matches.opt_present("h") {
-        print_usage(&args[0], &parameter_handler);
-    }
+    let scrape_config = ScrapeConfig::new(std::env::args());
 
-    if matches.opt_count("d") != 1 && matches.opt_count("y") != 1 {
-        print_usage(&args[0], &parameter_handler);
-    }
-
-    let year = matches.opt_str("y");
-    let root_dir = matches.opt_str("d").unwrap();
-    let games = matches.opt_str("g").map(|g| g.parse::<usize>().ok()).unwrap();
-
-    let mut pb = PathBuf::new();
-    pb.push(root_dir);
-    pb.push(DB_DIR);
-    let db_root_dir = pb.as_path();
-
+    let dbroot = scrape_config.db_asset_dir();
+    let db_root_dir = dbroot.as_path();
     if !db_root_dir.exists() {
         std::fs::create_dir(db_root_dir).expect(&format!("Failed to create directory {}", db_root_dir.to_str().unwrap()));
     }
 
     println!("Set database root directory: {}", db_root_dir.display());
-    let hsviewer_directory_string = args.get(0).expect("You need to provide directory of the HSViewer client application.");
-    let hsviewer_binary_dir = Path::new(hsviewer_directory_string);
-    if !hsviewer_binary_dir.exists() {
-        panic!("Directory doesn't exist!");
-    }
 
     match write_league_to_file(construct_league(), Path::new("./assets/db/teams.db")) {
         Ok(bytes_written) => {
@@ -242,17 +258,17 @@ fn main() {
                       "gameresults.db");
 
     // let (mut db, bytes_read) = processing::process_game_info_db(&mut game_info_file);
-    let game_info_db = processing::process_game_infos(&db_root_dir);
+    let game_info_db = processing::process_game_infos(&scrape_config);
     match game_info_db {
         GameInfoScraped::None(None) => {
-            game_info_scrape_all(year.unwrap().parse::<usize>().unwrap(), games);
+            game_info_scrape_all(&scrape_config);
         },
         GameInfoScraped::None(Some(serde_err)) => {
             // An error occured while trying to de-serialize stored data. we just panic for now
             handle_serde_json_error(serde_err);
         },
         GameInfoScraped::Partial(partial_data, Some(missing_games)) => {
-            let missing_scraped = game_info_scrape_missing(db_root_dir, missing_games);
+            let missing_scraped = game_info_scrape_missing(&scrape_config, missing_games);
             let total: Vec<&InternalGameInfo> = partial_data.iter().chain(missing_scraped.iter()).collect();
             let de_duplicated: HashMap<usize, &InternalGameInfo> = 
                 total.iter().map(|val| (val.get_id(), *val)).collect();
@@ -286,14 +302,14 @@ fn main() {
         },
         GameInfoScraped::All(season) => {
             // begin scraping & processing of Game Result data
-            assert_eq!(season.len(), GAMES_IN_SEASON);
+            assert_eq!(season.len(), scrape_config.season_games_len());
             println!("All game infos are scraped & serialized to 1 file. Begin scraping of results...");
             let mut buf = String::new();
             match game_results_file.read_to_string(&mut buf) {
                 Ok(bytes) => {
                     if bytes <= 2 {
                         let refs = season.iter().map(|x| x).collect();
-                        let result = scrape_and_log(&refs);
+                        let result = scrape_and_log(&refs, &scrape_config);
                         let (game_results, _errors) = scrape::process_gr_results(&result);
                         println!("Total game results scraped: {}", &game_results.len());
                         let data = serde_json::to_string(&game_results).expect("Couldn't serialize game results data");

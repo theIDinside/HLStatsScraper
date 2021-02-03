@@ -42,14 +42,14 @@ fn process_pp_summary(penalty_summary: &Vec<String>) -> (TeamValue<PowerPlay>, T
     (away_pp, home_pp)
 }
 
-fn scrape_game(client: &reqwest::blocking::Client, game_info: &InternalGameInfo) -> GameResult {
+fn scrape_game(client: &reqwest::blocking::Client, game_info: &InternalGameInfo, scrape_config: &ScrapeConfig) -> GameResult {
         use select::document::Document;
         use select::predicate::{Class, Name, And, Attr};
-
-        let gs_url = game_info.get_game_summary_url();
-        let evt_url = game_info.get_event_summary_url();
-        let sh_url = game_info.get_shot_summary_url();
-
+        let season = scrape_config.season_start();
+        let gs_url = game_info.get_game_summary_url(season);
+        let evt_url = game_info.get_event_summary_url(season);
+        let sh_url = game_info.get_shot_summary_url(season);
+        println!("Urls for game {}\n\t{} \n\t{}\n\t{}", game_info.get_id(), gs_url, evt_url, sh_url);
         let (gs, evt, sh) = (client.get(&gs_url).send(),
                            client.get(&evt_url).send(),
                            client.get(&sh_url).send());
@@ -275,8 +275,8 @@ fn scrape_game(client: &reqwest::blocking::Client, game_info: &InternalGameInfo)
             // Err(BuilderError::GameIncomplete(game_info.get_id(), vec!["Some field not parsed / added".to_owned()]))
         }
 }
-
-pub fn scrape_game_results(games: &Vec<&InternalGameInfo>) -> Vec<ScrapeResults<Game>> {
+use crate::ScrapeConfig;
+pub fn scrape_game_results(games: &Vec<&InternalGameInfo>, scrape_config: &ScrapeConfig) -> Vec<ScrapeResults<Game>> {
     println!("Running game scraping...");
     use pbr::ProgressBar;
     // returns a vector of tuple of two links, one to the game summary and one to the event summary
@@ -285,7 +285,7 @@ pub fn scrape_game_results(games: &Vec<&InternalGameInfo>) -> Vec<ScrapeResults<
     let mut pb = ProgressBar::new(games.len() as u64);
     pb.format("╢▌▌░╟");
     for game_info in games {
-        let res = scrape_game(&client, &game_info);
+        let res = scrape_game(&client, &game_info, scrape_config);
         match res {
             Ok(game) => {
                 result.push(Ok(game));
@@ -350,26 +350,5 @@ pub fn process_gr_results(results: &Vec<ScrapeResults<Game>>) -> (Vec<&Game>, Ve
 
 #[cfg(test)]
 mod tests {
-    use crate::scrape::{scrape_game_infos, process_results, ScrapeResult};
 
-    #[test]
-    fn scrape_3_gameinfos() {
-        let games = vec![2019020001, 2019020002, 2019020003];
-        let scrapes = scrape_game_infos(&games);
-        {
-            let (games, errors) = process_results(&scrapes);
-            assert_eq!(games.len(), 3);
-            assert_eq!(errors.len(), 0);
-        }
-        let result = ScrapeResult::new(scrapes);
-
-        assert_eq!(result.errors().len(), 0);
-        assert_eq!(result.good_results().len(), 3);
-
-        {
-            let (games, errors) = result.process();
-            assert_eq!(games.len(), 3);
-            assert_eq!(errors.len(), 0);
-        }
-    }
 }
