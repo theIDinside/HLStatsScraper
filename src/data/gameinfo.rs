@@ -39,7 +39,6 @@ impl std::cmp::Ord for InternalGameInfo {
         let date_cmp = self.date.cmp(&other.date);
         match gid_cmp {
             Ordering::Less if date_cmp == Ordering::Greater => {
-                println!("GID was less but Date was greater: {}/{}", self.get_id(), other.get_id());
                 Ordering::Greater
             },
             Ordering::Greater if date_cmp == Ordering::Less => {
