@@ -1,8 +1,7 @@
-use crate::data::{types::CalendarDate};
 use reqwest::Url;
 use crate::scrape::{convert_fwd_slashes, _BASE};
 use crate::scrape::errors::BuilderError;
-
+use super::calendar_date::CalendarDate;
 /// The actual GameInfo object that we send to the client "over the wire".
 #[derive(Eq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct GameInfo {

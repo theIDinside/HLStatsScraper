@@ -1,20 +1,10 @@
-// TODOS / Description of application's process
-// Pre-requisite data:
-// - Schedule
-// Get today's date, compare to downloaded schedule
-// Check latest added game, and it's gameID
-// Compare latest scraped ID, with first game of today's ID
-// Scrape the data between last saved, and first game of today
-
-// Possible structs:
-//  GameInfo - keeps record of home team, away team, date and gameID of a game
-//  Game - The actual scraped data of the result of a game
-extern crate reqwest;
-extern crate serde;
-extern crate serde_json;
-extern crate scraper;
-extern crate select;
-extern crate getopts;
+extern crate reqwest;       // used for scraping, for retrieving the actual HTML data
+extern crate serde;         // deserialization of json data
+extern crate serde_json;    // deserialization of json data
+extern crate scraper;       // used for scraping
+extern crate select;        // used for scraping
+extern crate getopts;       // for getting command line options
+extern crate chrono;        // for getting time and date - will eventually be replaced by custom library call to C, which will be OS specific for Linux and Windows. Because fuck Mac.
 
 #[macro_use] extern crate serde_derive;
 extern crate pbr;
@@ -172,9 +162,7 @@ pub fn setup_opts() -> Options {
 }
 
 fn main() {
-
     let scrape_config = ScrapeConfig::new(std::env::args());
-
     let dbroot = scrape_config.db_asset_dir();
     let db_root_dir = dbroot.as_path();
     if !db_root_dir.exists() {
@@ -196,8 +184,7 @@ fn main() {
                       "gameinfo.db",
                       "gameresults.db");
 
-    // let (mut db, bytes_read) = processing::process_game_info_db(&mut game_info_file);
-    let game_info_db = processing::process_game_infos(&scrape_config);
+    let game_info_db = processing::scrape_and_process_game_infos(&scrape_config);
     match game_info_db {
         GameInfoScraped::None(None) => {
             game_info_scrape_all(&scrape_config);
@@ -213,7 +200,7 @@ fn main() {
                 total.iter().map(|val| (val.get_id(), *val)).collect();
 
             assert_eq!(de_duplicated.len(), total.len());
-            if total.len() == 1271 { 
+            if total.len() == scrape_config.season_games_len() { 
                 let data = serde_json::to_string(&total).expect("Could not de-serialize fully compiled Game Info db to file");
                 match game_info_file.write_all(data.as_bytes()) {
                     Ok(_) => {
@@ -239,15 +226,19 @@ fn main() {
                 }
             }
         },
-        GameInfoScraped::All(season) => {
-            // begin scraping & processing of Game Result data
+        GameInfoScraped::All(mut season) => {
+            // We first must make sure all games are sorted by data & game id. 
+            // This is so we don't get errors when we try scraping a game with a low Game ID that has been postponed
+            let today = data::calendar_date::CalendarDate::get_date_from_os();
+            season.sort_by(|a, b| a.cmp(b));
             assert_eq!(season.len(), scrape_config.season_games_len());
             println!("All game infos are scraped & serialized to 1 file. Begin scraping of results...");
             let mut buf = String::new();
             match game_results_file.read_to_string(&mut buf) {
                 Ok(bytes) => {
-                    if bytes <= 2 {
-                        let refs = season.iter().map(|x| x).collect();
+                    if bytes <= 2 { // database is empty
+                        let refs: Vec<_> = season.iter().map(|x| x).filter(|game| game.date.cmp(&today) == std::cmp::Ordering::Less).collect();
+                        println!("Scraping {} game results", refs.len());
                         let result = scrape_and_log(&refs, &scrape_config);
                         let (game_results, _errors) = scrape::process_gr_results(&result);
                         println!("Total game results scraped: {}", &game_results.len());

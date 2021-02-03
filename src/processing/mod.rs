@@ -48,7 +48,7 @@ fn verify_deserialized_content(data: &Vec<InternalGameInfo>, scrape_config: &Scr
     data.len() == scrape_config.season_games_len()
 }
 
-pub fn process_game_infos(scrape_config: &ScrapeConfig) -> GameInfoScraped {
+pub fn scrape_and_process_game_infos(scrape_config: &ScrapeConfig) -> GameInfoScraped {
     let db_dir = scrape_config.db_asset_dir();
     assert_eq!(db_dir.exists(), true);
     let compiled_file_name = "gameinfo.db";
@@ -72,7 +72,6 @@ pub fn process_game_infos(scrape_config: &ScrapeConfig) -> GameInfoScraped {
     }
 
     if partials_dir.exists() { // means we haven't compiled a full DB yet.
-        println!("\nGame Info partials directory exists... Scanning contents");
         let mut all_partials = Vec::new();
         let mut count = 0;
         for entry in std::fs::read_dir(&partials_dir).expect(format!("Couldn't read directory {} or it's contents", partials_dir.display()).as_ref()) {

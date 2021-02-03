@@ -52,7 +52,7 @@ impl ScrapeConfig {
 
     pub fn season_ids_range(&self) -> std::ops::Range<usize> {
         let begin = first_game_id_of_season(self.season_start());
-        let end = first_game_id_of_season(self.season_start()) + self.season_games_len() + 1;
+        let end = first_game_id_of_season(self.season_start()) + self.season_games_len();
         begin .. end
     }
 

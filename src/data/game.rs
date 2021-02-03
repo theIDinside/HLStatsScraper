@@ -311,26 +311,4 @@ impl GameBuilder {
 #[cfg(test)]
 mod tests {
 
-    #[test]
-    fn test_deserializing_game() {
-        let game_data = r#"{"game_info":{"home":18,"away":23,"gid":2019020001,"date":{"year":2019,"month":10,"day":2}},
-            "goals":[{"goal_number":1,"player":"7 B.TKACHUK(1)","team":23,"period":{"First":{"minutes":0,"seconds":25}},"strength":"Even"},
-                    {"goal_number":2,"player":"33 F.GAUTHIER(1)","team":18,"period":{"Second":{"minutes":2,"seconds":20}},"strength":"Even"},
-                    {"goal_number":3,"player":"42 T.MOORE(1)","team":18,"period":{"Second":{"minutes":4,"seconds":42}},"strength":"Even"},
-                    {"goal_number":4,"player":"49 S.SABOURIN(1)","team":23,"period":{"Second":{"minutes":5,"seconds":51}},"strength":"Even"},
-                    {"goal_number":5,"player":"34 A.MATTHEWS(1)","team":18,"period":{"Second":{"minutes":8,"seconds":2}},"strength":"Even"},
-                    {"goal_number":6,"player":"34 A.MATTHEWS(2)","team":18,"period":{"Second":{"minutes":14,"seconds":50}},"strength":"PowerPlay"},
-                    {"goal_number":7,"player":"65 I.MIKHEYEV(1)","team":18,"period":{"Third":{"minutes":9,"seconds":43}},"strength":"Even"},
-                    {"goal_number":8,"player":"9 B.RYAN(1)","team":23,"period":{"Third":{"minutes":17,"seconds":45}},"strength":"Even"}],
-            "winning_team":18,
-            "final_score":{"away":3,"home":5},
-            "shots":[{"away":12,"home":14},
-                     {"away":3,"home":17},
-                     {"away":11,"home":11}],
-            "power_plays":{"away":{"goals":0,"total":3},
-            "home":{"goals":1,"total":5}},
-            "take_aways":{"away":7,"home":13},
-            "give_aways":{"away":8,"home":12},
-            "face_offs":{"away":58.0,"home":42.0}}"#;
-    }
 }

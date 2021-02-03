@@ -60,7 +60,7 @@ fn scrape_game(client: &reqwest::blocking::Client, game_info: &InternalGameInfo,
         let gs_url = game_info.get_game_summary_url(season);
         let evt_url = game_info.get_event_summary_url(season);
         let sh_url = game_info.get_shot_summary_url(season);
-        println!("Urls for game {}\n\t{} \n\t{}\n\t{}", game_info.get_id(), gs_url, evt_url, sh_url);
+        // println!("Urls for game {}\n\t{} \n\t{}\n\t{}", game_info.get_id(), gs_url, evt_url, sh_url);
         let (gs, evt, sh) = (client.get(&gs_url).send(),
                            client.get(&evt_url).send(),
                            client.get(&sh_url).send());
