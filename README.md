@@ -3,7 +3,7 @@ Used as the data scraper for the HockeyStatsViewer. This has been moved out of t
 
 ## The data scraping client
 
-Build using 
+Build using:
 
 ```bash
 cargo build
