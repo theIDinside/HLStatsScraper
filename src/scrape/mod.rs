@@ -1,7 +1,18 @@
 pub mod errors;
+pub mod scrape_config;
+
+pub mod export {
+    pub use super::ScrapeResults;
+    pub use super::scrape_game_infos;
+    pub use super::process_results;
+    pub use super::scrape_config::first_game_id_of_season;
+    pub use super::scrape_config::ScrapeConfig;
+}
+
+
+
 use reqwest::{blocking::{Client}};
 use crate::data::gameinfo::{InternalGameInfo};
-use crate::{BASE_URL};
 use crate::data::game::{Game, GameBuilder, TeamValue};
 use crate::data::stats::{GoalBuilder, Period, Time, GoalStrength, PowerPlay, Shots};
 use crate::data::team::{get_id};
@@ -42,7 +53,7 @@ fn process_pp_summary(penalty_summary: &Vec<String>) -> (TeamValue<PowerPlay>, T
     (away_pp, home_pp)
 }
 
-fn scrape_game(client: &reqwest::blocking::Client, game_info: &InternalGameInfo, scrape_config: &ScrapeConfig) -> GameResult {
+fn scrape_game(client: &reqwest::blocking::Client, game_info: &InternalGameInfo, scrape_config: &scrape_config::ScrapeConfig) -> GameResult {
         use select::document::Document;
         use select::predicate::{Class, Name, And, Attr};
         let season = scrape_config.season_start();
@@ -275,8 +286,8 @@ fn scrape_game(client: &reqwest::blocking::Client, game_info: &InternalGameInfo,
             // Err(BuilderError::GameIncomplete(game_info.get_id(), vec!["Some field not parsed / added".to_owned()]))
         }
 }
-use crate::ScrapeConfig;
-pub fn scrape_game_results(games: &Vec<&InternalGameInfo>, scrape_config: &ScrapeConfig) -> Vec<ScrapeResults<Game>> {
+
+pub fn scrape_game_results(games: &Vec<&InternalGameInfo>, scrape_config: &scrape_config::ScrapeConfig) -> Vec<ScrapeResults<Game>> {
     println!("Running game scraping...");
     use pbr::ProgressBar;
     // returns a vector of tuple of two links, one to the game summary and one to the event summary
@@ -309,7 +320,7 @@ pub fn scrape_game_infos(game_ids: &Vec<usize>) -> Vec<ScrapeResults<InternalGam
     let mut result = Vec::new();
     let client = Client::new();
     for id in game_ids {
-        let url_string = format!("{}/{}", BASE_URL, id);
+        let url_string = format!("{}/{}", scrape_config::BASE_URL, id);
         let r = client.get(&url_string).send();
         if let Ok(resp) = r {
             let url = resp.url();

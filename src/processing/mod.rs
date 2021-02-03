@@ -3,7 +3,7 @@ use super::data::gameinfo::InternalGameInfo;
 use std::io::{Read};
 use std::fs::OpenOptions;
 
-use crate::GAMES_IN_SEASON;
+use crate::scrape::scrape_config::GAMES_IN_SEASON;
 
 pub type FileResult = Result<String, std::io::Error>;
 
@@ -29,9 +29,9 @@ fn check_missing(games: &Vec<InternalGameInfo>, scrape_config: &ScrapeConfig) ->
     let mut missing_games = Vec::new();
     let ids: Vec<usize> = games.iter().map(|x| x.get_id()).collect();
 
-    let ALL_GAMES = scrape_config.season_ids_range();
+    let all_games = scrape_config.season_ids_range();
 
-    for game in ALL_GAMES {
+    for game in all_games {
         if !ids.contains(&game) {
             missing_games.push(game);
         }
