@@ -15,7 +15,6 @@ using cargo run -- . the data will be saved under a sub folder called assets/db.
 If the application is *not* run inside that directory, create the subfolders assets/db and assets/db/gi_partials.
 
 ## Usage
-
 From the terminal (or "prompt" in useless a¤¤ windows), type
 
 ```bash
