@@ -68,7 +68,10 @@ fn open_db_files<'a>(db_asset_path: std::path::PathBuf, info_file: &str, results
     (game_info, game_results)
 }
 
-pub fn over_write_gameresults_db(db_asset_path: std::path::PathBuf, results_file: &str, games: Vec<&Game>) -> Result<usize, String> {
+
+/// Purges the DB and writes a new one with the contents of parameter games
+/// Returns a result of (bytes written | error message)
+pub fn purgewrite_gameresults(db_asset_path: std::path::PathBuf, results_file: &str, games: Vec<&Game>) -> Result<usize, String> {
     let db_dir = db_asset_path.as_path();
     let game_results_path = db_dir.join(results_file);
     let data = serde_json::to_string(&games).expect("Couldn't serialize game results data");
@@ -298,7 +301,7 @@ fn main() {
                             let scraped = game_results.len();
                             println!("Total game results scraped: {}", &scraped);
                             games_ref.append(&mut game_results);
-                            match over_write_gameresults_db(scrape_config.db_asset_dir(), "gameresults.db", games_ref) {
+                            match purgewrite_gameresults(scrape_config.db_asset_dir(), "gameresults.db", games_ref) {
                                 Ok(bytes_written) => {
                                     println!("Successfully serialized database ({} bytes written)", bytes_written);
                                 },
