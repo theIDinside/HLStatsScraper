@@ -298,16 +298,24 @@ use std::sync::mpsc;
 use std::thread;
 
 pub fn scrape_game_results_threaded(games: &Vec<&InternalGameInfo>, scrape_config: &scrape_config::ScrapeConfig) -> Vec<ScrapeResults<Game>> {
-    println!("Running game scraping...");
+    
     use pbr::ProgressBar;
     // returns a vector of tuple of two links, one to the game summary and one to the event summary
     let mut result = Vec::new();
     let mut pb = ProgressBar::new(games.len() as u64);
     let (tx, rx): (Sender<ScrapeResults<Game>>, Receiver<ScrapeResults<Game>>) = mpsc::channel();
-    
+    let amount = games.len();
+    let divisor = if amount < 8 {
+        1
+    } else if amount < 16 {
+        2
+    } else  {
+        4
+    };
+    println!("Running game scraping in {} threads", divisor);
     let mut jobs: Vec<Vec<InternalGameInfo>> = vec![];
-    let chunks = games.chunks_exact(4);
-    let jobs_per_thread = games.len() / 4;
+    let chunks = games.chunks_exact(divisor);
+    let jobs_per_thread = games.len() / divisor;
     for chunk in chunks {
         let mut v = vec![];
         for item in chunk {
@@ -316,8 +324,8 @@ pub fn scrape_game_results_threaded(games: &Vec<&InternalGameInfo>, scrape_confi
         jobs.push(v);
     }
 
-    for item in games.iter().skip(jobs_per_thread * 4) {
-        jobs[3].push(item.make_clone());
+    for item in games.iter().skip(jobs_per_thread * divisor) {
+        jobs[divisor-1].push(item.make_clone());
     }
     let mut totals_assert = 0;
     for j in &jobs {

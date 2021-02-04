@@ -62,9 +62,36 @@ fn open_db_files<'a>(db_asset_path: std::path::PathBuf, info_file: &str, results
     let game_results = OpenOptions::new()
         .read(true)
         .write(true)
+        .append(false) // we want to _replace_ the contents if we write to it
         .create(true)
         .open(&game_results_path).expect(format!("Couldn't open/create file {}", game_results_path.display()).as_ref());
     (game_info, game_results)
+}
+
+pub fn over_write_gameresults_db(db_asset_path: std::path::PathBuf, results_file: &str, games: Vec<&Game>) -> Result<usize, String> {
+    let db_dir = db_asset_path.as_path();
+    let game_results_path = db_dir.join(results_file);
+    let data = serde_json::to_string(&games).expect("Couldn't serialize game results data");
+    if let Err(e) = std::fs::remove_file(&game_results_path) {
+        println!("Removing of file failed: {}", e);
+        panic!("Exiting");
+    }
+    let mut game_results = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .open(&game_results_path).expect(format!("Couldn't open/create file {}", game_results_path.display()).as_ref());
+
+    match game_results.write_all(data.as_bytes()) {
+        Ok(_) => {
+            println!("Successfully wrote serialized data to file");
+            Ok(data.len())
+        },
+        Err(e) => {
+            println!("Could not write serialized data to file. Error: {}", e);
+            panic!("Exiting");
+        }
+    }
 }
 
 // TODO: since games totals for a season has been messed up for covid, we now currently (until next season) use a public static mutable, 
@@ -161,12 +188,14 @@ pub fn setup_opts() -> Options {
     opts.reqopt("d", "dir", "directory where assets/db and assets/db/gi_partials exist, absolute or relative. (required)", "PATH")
         .reqopt("y", "season", "the year, which the season you want to scrape started (required)", "YEAR")
         .optopt("g", "games", "If the season is not of standard length, pass the amount of games via this parameter (optional)", "GAMES_AMOUNT")
-        .optopt("h", "help", "Help message for data stats scraper.", "This help message");
+        .optopt("h", "help", "Help message for data stats scraper.", "This help message")
+        .optopt("e", "end", "Scrape up until this date. If no date is provided, the tool will try to establish today's date.", "DATE (in the form yyyymmdd");
     opts
 }
 
 fn main() {
     let scrape_config = ScrapeConfig::new(std::env::args());
+    scrape_config.display_user_config();
     let dbroot = scrape_config.db_asset_dir();
     let db_root_dir = dbroot.as_path();
     if !db_root_dir.exists() {
@@ -187,7 +216,7 @@ fn main() {
         open_db_files(scrape_config.db_asset_dir(),
                       "gameinfo.db",
                       "gameresults.db");
-
+    
     let game_info_db = processing::scrape_and_process_game_infos(&scrape_config);
     match game_info_db {
         GameInfoScraped::None(None) => {
@@ -233,8 +262,6 @@ fn main() {
         GameInfoScraped::All(mut season) => {
             // We first must make sure all games are sorted by data & game id. 
             // This is so we don't get errors when we try scraping a game with a low Game ID that has been postponed
-            let mut today = data::calendar_date::CalendarDate::get_date_from_os();
-            today.day -= 1;
             season.sort_by(|a, b| a.cmp(b));
             assert_eq!(season.len(), scrape_config.season_games_len());
             println!("All game infos are scraped & serialized to 1 file. Begin scraping of results...");
@@ -242,7 +269,7 @@ fn main() {
             match game_results_file.read_to_string(&mut buf) {
                 Ok(bytes) => {
                     if bytes <= 2 { // database is empty
-                        let refs: Vec<_> = season.iter().map(|x| x).filter(|game| game.date.cmp(&today) == std::cmp::Ordering::Less).collect();
+                        let refs: Vec<_> = season.iter().map(|x| x).filter(|game| game.date.cmp(scrape_config.scrape_until_date()) == std::cmp::Ordering::Less).collect();
                         println!("Scraping {} game results", refs.len());
                         let result = scrape_and_log(&refs, &scrape_config);
                         let (game_results, _errors) = scrape::process_gr_results(&result);
@@ -260,6 +287,26 @@ fn main() {
                     } else { //
                         let data: Vec<IntermediateGame> = serde_json::from_str(&buf).expect("Couldn't de-serialize data for Game results");
                         let games: Vec<Game> = data.into_iter().map(|im_game| Game::from(im_game)).collect();
+                        // we need this, to be able to append the game results, as they are returned as a vector of references
+                        let mut games_ref: Vec<&Game> = games.iter().map(|x| x).collect(); 
+                        let refs: Vec<_> = season.iter().map(|x| x).filter(|game| game.date.cmp(scrape_config.scrape_until_date()) == std::cmp::Ordering::Less).collect();
+                        if games.len() < refs.len() {
+                            println!("{} games have not been scraped. Scraping remaining", refs.len() - games.len());
+                            let remaining: Vec<_> = refs.into_iter().skip(games.len()).collect();
+                            let result = scrape_and_log(&remaining, &scrape_config);
+                            let (mut game_results, _errors) = scrape::process_gr_results(&result);
+                            let scraped = game_results.len();
+                            println!("Total game results scraped: {}", &scraped);
+                            games_ref.append(&mut game_results);
+                            match over_write_gameresults_db(scrape_config.db_asset_dir(), "gameresults.db", games_ref) {
+                                Ok(bytes_written) => {
+                                    println!("Successfully serialized database ({} bytes written)", bytes_written);
+                                },
+                                Err(err_msg) => {
+                                    println!("Serialization failed: {}", err_msg);
+                                }
+                            }
+                        }
                         println!("Games de-serialized: {}. No more games to scrape from this regular season.", games.len());        
                     }
                 },

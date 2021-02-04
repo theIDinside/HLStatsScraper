@@ -88,7 +88,7 @@ impl InternalGameInfo {
                 let home_team = teams[1].to_string().to_uppercase();
                 let date_string = date.chars().into_iter().map(convert_fwd_slashes).collect::<String>();
                 let date_fields: Vec<u32> = date_string.split("-").into_iter().map(|field| field.parse::<u32>().unwrap()).collect::<Vec<u32>>().into_iter().rev().collect();
-                let date = CalendarDate::new(date_fields[0], date_fields[1], date_fields[2]);
+                let date = CalendarDate::new(date_fields[0] as u8, date_fields[1] as u8, date_fields[2] as u16);
                 let game_id = game_id.parse::<usize>().ok();
                 Ok(InternalGameInfo::new(home_team, away_team, game_id.unwrap(), date))
             } else {
@@ -122,8 +122,8 @@ impl InternalGameInfo {
 
     pub fn make_key_value_pair(gi: InternalGameInfo) -> (usize, InternalGameInfo) { (gi.get_id(), gi ) }
 
-    pub fn get_date_tuple(&self) -> (u32, u32, u32) {
-        (self.date.day, self.date.month, self.date.year as u32)
+    pub fn get_date_tuple(&self) -> (u16, u8, u8) {
+        (self.date.year, self.date.month, self.date.day)
     }
 
     pub fn get_event_summary_url(&self, season: usize) -> String {
