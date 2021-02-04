@@ -94,7 +94,7 @@ impl ScrapeConfig {
     }
 
     pub fn display_user_config(&self) {
-        println!("Configuration set to: \nRoot directory {}\nSeason: {}\nGames in season: {}\nScrap until date {}", self.root_directory.display(), self.season, self.season_games_len(), self.end_date);
+        println!("Configuration set to: \nRoot directory {}\nSeason: {}\nGames in season: {}\nScrap until date {}\nJobs: {}", self.root_directory.display(), self.season, self.season_games_len(), self.end_date, self.jobs);
     }
 
     pub fn db_asset_dir(&self) -> PathBuf {

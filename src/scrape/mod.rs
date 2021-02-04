@@ -4,6 +4,7 @@ pub mod scrape_config;
 pub mod export {
     pub use super::ScrapeResults;
     pub use super::scrape_game_infos;
+    pub use super::scrape_gameinfos;
     pub use super::process_results;
     pub use super::scrape_config::first_game_id_of_season;
     pub use super::scrape_config::ScrapeConfig;
@@ -23,8 +24,17 @@ use crate::scrape::errors::BuilderError;
 pub type ScrapeResults<T> = Result<T, (usize, BuilderError)>;
 pub type GameResult = Result<Game, BuilderError>;
 
+pub enum WorkerMessage {
+    Quit,
+    Job(Vec<usize>)
+}
+
 pub const _BASE: &'static str = "https://www.nhl.com/gamecenter/";
 pub const _VS: &'static str = "-vs-";
+
+use std::sync::mpsc::{Sender, Receiver};
+use std::sync::mpsc;
+use std::thread;
 
 pub fn convert_fwd_slashes(ch: char) -> char {
     if ch == '/' {
@@ -72,7 +82,7 @@ fn scrape_game(client: &reqwest::blocking::Client, game_info: &InternalGameInfo,
                 if a_status == reqwest::StatusCode::OK && b_status == reqwest::StatusCode::OK && c_status == reqwest::StatusCode::OK {
                     (a.text().unwrap(), b.text().unwrap(), c.text().unwrap())
                 } else {
-                    println!("Game {} was postponed", game_info.get_id());
+                    println!("\nGame {} was postponed", game_info.get_id());
                     return Err(BuilderError::GamePostponed);
                 }
             },
@@ -293,24 +303,25 @@ fn scrape_game(client: &reqwest::blocking::Client, game_info: &InternalGameInfo,
         }
 }
 
-use std::sync::mpsc::{Sender, Receiver};
-use std::sync::mpsc;
-use std::thread;
 
 pub fn scrape_game_results_threaded(games: &Vec<&InternalGameInfo>, scrape_config: &scrape_config::ScrapeConfig) -> Vec<ScrapeResults<Game>> {
-    
     use pbr::ProgressBar;
     // returns a vector of tuple of two links, one to the game summary and one to the event summary
     let mut result = Vec::new();
     let mut pb = ProgressBar::new(games.len() as u64);
     let (tx, rx): (Sender<ScrapeResults<Game>>, Receiver<ScrapeResults<Game>>) = mpsc::channel();
     let amount = games.len();
-    let divisor = if amount < 8 {
+    let mut divisor = scrape_config.requested_jobs();
+    divisor = if amount < 8 {
         1
     } else if amount < 16 {
         2
     } else  {
-        4
+        if divisor > amount { // if you provide it 1000 threads to do the job... well you just blew your own damn foot off. not my problem
+            amount
+        } else {
+            divisor
+        }
     };
     println!("Running game scraping in {} threads", divisor);
     let mut jobs: Vec<Vec<InternalGameInfo>> = vec![];
@@ -403,6 +414,30 @@ pub fn scrape_game_results(games: &Vec<&InternalGameInfo>, scrape_config: &scrap
     result
 }
 
+pub fn scrape_gameinfos(client: &Client, game_ids: &Vec<usize>) -> Vec<ScrapeResults<InternalGameInfo>> { 
+    let count = game_ids.len() as u64;
+    let mut result = vec![];
+    for id in game_ids {
+        let url_string = format!("{}/{}", scrape_config::BASE_URL, id);
+        let r = client.get(&url_string).send();
+        if let Ok(resp) = r {
+            let url = resp.url();
+            let g_info_result = InternalGameInfo::from_url(url);
+            match g_info_result {
+                Ok(res) => {
+                    result.push(Ok(res))
+                },
+                Err(e) => {
+                    result.push(Err((*id, e)))
+                }
+            }
+        } else if let Err(e) = r {
+            result.push(Err((*id, BuilderError::from(e))));
+        }
+    }
+    result
+}
+
 pub fn scrape_game_infos(game_ids: &Vec<usize>) -> Vec<ScrapeResults<InternalGameInfo>> {
     // Rust ranges are end-exclusive. So we have to add 1
     use pbr::ProgressBar;
@@ -430,7 +465,7 @@ pub fn scrape_game_infos(game_ids: &Vec<usize>) -> Vec<ScrapeResults<InternalGam
         }
         pb.inc();
     }
-    pb.finish_print(format!("Done scraping game info for {} games. Sorting", count).as_ref());
+    pb.finish_print(format!("Done scraping game info for {} games.\n", count).as_ref());
     result
 }
 
@@ -439,6 +474,11 @@ pub fn scrape_game_infos(game_ids: &Vec<usize>) -> Vec<ScrapeResults<InternalGam
 pub fn process_results(results: &mut Vec<ScrapeResults<InternalGameInfo>>) -> (Vec<&InternalGameInfo>, Vec<&(usize, BuilderError)>)
 {
     let errors: Vec<&(usize, BuilderError)> = results.iter().filter_map(|f| f.as_ref().err()).collect();
+    if !errors.is_empty() {
+        println!("Scrape of Game Info contained {} errors", errors.len());
+    } else {
+        println!("Scrape of Game Info successful");
+    }
     let mut games: Vec<&InternalGameInfo> = results.iter().filter_map(|f| {
         f.as_ref().ok()
     }).collect();

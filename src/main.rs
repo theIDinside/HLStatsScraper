@@ -5,7 +5,7 @@ extern crate scraper;       // used for scraping
 extern crate select;        // used for scraping
 extern crate getopts;       // for getting command line options
 extern crate chrono;        // for getting time and date - will eventually be replaced by custom library call to C, which will be OS specific for Linux and Windows. Because fuck Mac.
-
+extern crate num_cpus;      // for determining max cpus
 #[macro_use] extern crate serde_derive;
 extern crate pbr;           // progress bar in the terminal/console
 
@@ -20,6 +20,11 @@ use std::fs::{File, OpenOptions};
 use std::io::{Write, Read};
 use std::time::Instant;
 use std::collections::HashMap;
+// Threading stuff
+use std::sync::mpsc::{Sender, Receiver};
+use std::sync::mpsc;
+use std::thread;
+
 
 use data::{game::{Game, IntermediateGame}, gameinfo::{InternalGameInfo}, team::{construct_league, write_league_to_file}};
 use scrape::export::*;
@@ -97,6 +102,94 @@ pub fn purgewrite_gameresults(db_asset_path: std::path::PathBuf, results_file: &
     }
 }
 
+use reqwest::{blocking::{Client}};
+pub fn game_info_scrape_all_threaded(scrape_config: &ScrapeConfig) {
+    if scrape_config.requested_jobs() == 1 {
+        game_info_scrape_all(scrape_config);
+    } else {
+        let season = scrape_config.season_start();
+        let games_in_season = scrape_config.season_games_len();
+        let count = games_in_season as u64;
+        let mut pb = pbr::ProgressBar::new(count);
+        pb.format("╢▌▌░╟");
+
+        let (tx, rx): (Sender<ScrapeResults<InternalGameInfo>>, Receiver<ScrapeResults<InternalGameInfo>>) = mpsc::channel();
+
+        println!("Scraping game info for season {} - {} games, using {} threads", season, games_in_season, scrape_config.requested_jobs());
+        // Begin scraping of all game info
+        let full_season_ids: Vec<usize> = scrape_config.season_ids_range().collect();
+        // make sure, we split it up so all chunks get processed. 
+        let jobs_size = ((full_season_ids.len() as f64) / (scrape_config.requested_jobs() as f64)).ceil() as usize;
+        let game_id_chunks: Vec<Vec<usize>> = full_season_ids.chunks(jobs_size).map(|chunk| {
+            chunk.into_iter().map(|v| *v).collect()
+        }).collect();
+
+        let mut threads = vec![];
+        for job in game_id_chunks {
+            let tx_clone = tx.clone();
+            let scraper_thread = thread::spawn(move || {
+                let client_inner = Client::new();
+                let t = tx_clone;
+                for id in job {
+                    let url_string = format!("{}/{}", scrape::scrape_config::BASE_URL, id);
+                    let r = client_inner.get(&url_string).send();
+                    if let Ok(resp) = r {
+                        let url = resp.url();
+                        let g_info_result = InternalGameInfo::from_url(url);
+                        match g_info_result {
+                            Ok(res) => {
+                                t.send(Ok(res)).expect("Channel send error of valid scrape");
+                            },
+                            Err(e) => {
+                                t.send(Err((id, e))).expect("Channel send error of invalid scrape");
+                            }
+                        }
+                    } else if let Err(e) = r {
+                        t.send(Err((id, scrape::errors::BuilderError::from(e)))).expect("Channel send error of scraping client error");
+                    }
+                }
+            });
+            threads.push(scraper_thread);
+        }
+
+        let mut result = vec![];
+        while result.len() < count as usize {
+            let msg = rx.recv();
+            match msg {
+                Ok(item) => result.push(item),
+                Err(e) => {
+                    println!("Channel error - {}", e);
+                    result.push(Err((0, scrape::errors::BuilderError::ChannelError)))
+                }
+            }
+            pb.inc();
+        }
+        pb.finish_print(format!("Done scraping game info for {} games.\n", count).as_ref());
+        for t in threads {
+            t.join().expect("Thread panicked");
+        }
+        let (games, _errors) = process_results(&mut result);
+        let data = serde_json::to_string(&games).unwrap();
+        let file_path = scrape_config.db_asset_dir().join("gameinfo.db");
+        let mut info_file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .open(&file_path).expect(format!("Couldn't open/create file {}", &file_path.display()).as_ref());            
+        match info_file.write_all(data.as_bytes()) {
+            Ok(_) => {
+                println!("Successfully wrote {} game infos to file {}. ({} bytes)", games.len(), &file_path.display(), data.len());
+            },
+            Err(e) => {
+                println!("Failed to write serialized data to {}. OS error message: {}", &file_path.display(), e);
+                panic!("Exiting");
+            }
+        }
+        
+
+    }
+}
+
 // TODO: since games totals for a season has been messed up for covid, we now currently (until next season) use a public static mutable, 
 //  that gets set for amount of games, which can be read from, on a project-wide level (PROVIDED_GAMES_IN_SEASON). This will change.
 // This is to turn off warning for games_total
@@ -125,7 +218,7 @@ pub fn game_info_scrape_all(scrape_config: &ScrapeConfig) {
         for g in &games {
             print!("{}: {:?}", g.get_id(), g.get_date_tuple());
         }
-        let data = serde_json::to_string(&games).unwrap();            
+        let data = serde_json::to_string(&games).unwrap();
         let mut info_file = OpenOptions::new()
         .read(true)
         .write(true)
@@ -178,24 +271,6 @@ pub fn handle_serde_json_error(err: serde_json::Error) {
     panic!("De-serializing data failed. Make sure data is in the correct format, or delete all current data and re-scrape everything (Warning, may take a long time)");
 }
 
-/// Prints usage and exits (the ! means we never exit, but actually we do, by calling process::exit. This makes this function usable in match arms where we must return a value, where otherwise the compiler would
-/// call bullshit, and say we don't return a value, usable in an Err(e) arm for instance, where we don't want to panic! but we want to exit)
-fn print_usage(executable_name: &str, opts: &Options) -> ! {
-    let help_message = format!("Usage: {} [options]", executable_name);
-    println!("{}", opts.usage(&help_message));
-    std::process::exit(0);
-}
-
-pub fn setup_opts() -> Options {
-    let mut opts = Options::new();
-    opts.reqopt("d", "dir", "directory where assets/db and assets/db/gi_partials exist, absolute or relative. (required)", "PATH")
-        .reqopt("y", "season", "the year, which the season you want to scrape started (required)", "YEAR")
-        .optopt("g", "games", "If the season is not of standard length, pass the amount of games via this parameter (optional)", "GAMES_AMOUNT")
-        .optopt("h", "help", "Help message for data stats scraper.", "This help message")
-        .optopt("e", "end", "Scrape up until this date. If no date is provided, the tool will try to establish today's date.", "DATE (in the form yyyymmdd");
-    opts
-}
-
 fn main() {
     let scrape_config = ScrapeConfig::new(std::env::args());
     scrape_config.display_user_config();
@@ -207,7 +282,8 @@ fn main() {
 
     println!("Set database root directory: {}", db_root_dir.display());
 
-    match write_league_to_file(construct_league(), Path::new("./assets/db/teams.db")) {
+    
+    match write_league_to_file(construct_league(), scrape_config.db_asset_dir().join("teams.db").as_path()) {
         Ok(bytes_written) => {
             println!("Wrote teams to DB file, {} bytes", bytes_written);
         },
@@ -223,7 +299,10 @@ fn main() {
     let game_info_db = processing::scrape_and_process_game_infos(&scrape_config);
     match game_info_db {
         GameInfoScraped::None(None) => {
-            game_info_scrape_all(&scrape_config);
+            println!("No game infos has been scraped... Begin scraping....");
+            game_info_scrape_all_threaded(&scrape_config);
+            // game_info_scrape_all(&scrape_config);
+
         },
         GameInfoScraped::None(Some(serde_err)) => {
             // An error occured while trying to de-serialize stored data. we just panic for now

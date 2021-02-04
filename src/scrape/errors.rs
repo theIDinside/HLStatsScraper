@@ -14,7 +14,8 @@ pub enum BuilderError {
     StringOperationFailed(String, Message),
     CouldNotParseGameID(String),
     WrongURLStringFormat(String),
-    GamePostponed
+    GamePostponed,
+    ChannelError
 }
 
 impl std::fmt::Display for BuilderError {
@@ -43,6 +44,9 @@ impl std::fmt::Display for BuilderError {
             },
             BuilderError::GamePostponed => {
                 write!(f, "Game was postponed")
+            }
+            BuilderError::ChannelError => {
+                write!(f, "Channel error")
             }
         }
     }
