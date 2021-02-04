@@ -66,7 +66,7 @@ pub fn scrape_and_process_game_infos(scrape_config: &ScrapeConfig) -> GameInfoSc
         if verify_deserialized_content(&contents, scrape_config) {
             return GameInfoScraped::All(contents);
         } else {
-            println!("De-serialized content does not match {} games. Found games: {}", GAMES_IN_SEASON, contents.len());
+            println!("De-serialized content does not match {} games. Found games: {}", scrape_config.season_games_len(), contents.len());
             panic!("Exiting");
         }
     }

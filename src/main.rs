@@ -287,8 +287,8 @@ fn main() {
         Ok(bytes_written) => {
             println!("Wrote teams to DB file, {} bytes", bytes_written);
         },
-        Err(_write_error) => {
-
+        Err(write_error) => {
+            panic!("Failed to write teams db: {}", write_error);
         }
     }
     let (mut game_info_file, mut game_results_file) =
