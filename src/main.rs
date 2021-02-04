@@ -13,6 +13,8 @@ mod data;
 mod scrape;
 mod processing;
 
+use getopts::Options;
+
 use std::path::{Path};
 use std::fs::{File, OpenOptions};
 use std::io::{Write, Read};
@@ -37,7 +39,9 @@ impl processing::FileString for std::fs::File {
 fn scrape_and_log(games: &Vec<&InternalGameInfo>, scrape_config: &ScrapeConfig) -> Vec<ScrapeResults<Game>> {
     println!("Beginning scraping of {} games", games.len());
     let scrape_begin_time = Instant::now();
-    let game_results = scrape::scrape_game_results(&games, scrape_config);
+    // let game_results = scrape::scrape_game_results(&games, scrape_config);
+    let game_results = scrape::scrape_game_results_threaded(&games, scrape_config);
+    println!("Scraped {} game results", game_results.len());
     let scrape_time_elapsed = scrape_begin_time.elapsed().as_millis();
     println!("Tried scraping {} games in {}ms", game_results.len(), scrape_time_elapsed);
     game_results
@@ -144,8 +148,6 @@ pub fn handle_serde_json_error(err: serde_json::Error) {
     panic!("De-serializing data failed. Make sure data is in the correct format, or delete all current data and re-scrape everything (Warning, may take a long time)");
 }
 
-use getopts::Options;
-
 /// Prints usage and exits (the ! means we never exit, but actually we do, by calling process::exit. This makes this function usable in match arms where we must return a value, where otherwise the compiler would
 /// call bullshit, and say we don't return a value, usable in an Err(e) arm for instance, where we don't want to panic! but we want to exit)
 fn print_usage(executable_name: &str, opts: &Options) -> ! {
@@ -231,7 +233,8 @@ fn main() {
         GameInfoScraped::All(mut season) => {
             // We first must make sure all games are sorted by data & game id. 
             // This is so we don't get errors when we try scraping a game with a low Game ID that has been postponed
-            let today = data::calendar_date::CalendarDate::get_date_from_os();
+            let mut today = data::calendar_date::CalendarDate::get_date_from_os();
+            today.day -= 1;
             season.sort_by(|a, b| a.cmp(b));
             assert_eq!(season.len(), scrape_config.season_games_len());
             println!("All game infos are scraped & serialized to 1 file. Begin scraping of results...");

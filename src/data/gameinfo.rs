@@ -108,6 +108,16 @@ impl InternalGameInfo {
         }
     }
 
+    pub fn make_clone(&self) -> InternalGameInfo {
+        let InternalGameInfo{home, away, gid, date} = self;
+        InternalGameInfo {
+            home: home.clone(),
+            away: away.clone(),
+            gid: *gid,
+            date: date.clone()
+        }
+    }
+
     pub fn get_id(&self) -> usize { self.gid }
 
     pub fn make_key_value_pair(gi: InternalGameInfo) -> (usize, InternalGameInfo) { (gi.get_id(), gi ) }

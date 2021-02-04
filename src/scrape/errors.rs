@@ -13,7 +13,8 @@ pub enum BuilderError {
     GameIncomplete(usize, Vec<String>),
     StringOperationFailed(String, Message),
     CouldNotParseGameID(String),
-    WrongURLStringFormat(String)
+    WrongURLStringFormat(String),
+    GamePostponed
 }
 
 impl std::fmt::Display for BuilderError {
@@ -39,6 +40,9 @@ impl std::fmt::Display for BuilderError {
             },
             BuilderError::WrongURLStringFormat(url_string) => {
                 write!(f, "URL string format was faulty: {}", url_string)
+            },
+            BuilderError::GamePostponed => {
+                write!(f, "Game was postponed")
             }
         }
     }

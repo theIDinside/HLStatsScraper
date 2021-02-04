@@ -10,6 +10,7 @@ pub fn first_game_id_of_season(year_season_begins: usize) -> usize {
 
 const DB_DIR: &'static str = "assets/db";
 
+#[derive(Clone)]
 pub struct ScrapeConfig {
     root_directory: PathBuf,
     season: usize, /// The year the season "started" (or was supposed to start, in this case)

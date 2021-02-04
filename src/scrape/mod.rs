@@ -64,11 +64,17 @@ fn scrape_game(client: &reqwest::blocking::Client, game_info: &InternalGameInfo,
         let (gs, evt, sh) = (client.get(&gs_url).send(),
                            client.get(&evt_url).send(),
                            client.get(&sh_url).send());
-
+        
         let (game_html_data, event_html_data, shots_html_data) =
         match (gs, evt, sh) {
             (Ok(a), Ok(b), Ok(c)) => {
-                (a.text().unwrap(), b.text().unwrap(), c.text().unwrap())
+                let (a_status, b_status, c_status) = (a.status(), b.status(), c.status());
+                if a_status == reqwest::StatusCode::OK && b_status == reqwest::StatusCode::OK && c_status == reqwest::StatusCode::OK {
+                    (a.text().unwrap(), b.text().unwrap(), c.text().unwrap())
+                } else {
+                    println!("Game {} was postponed", game_info.get_id());
+                    return Err(BuilderError::GamePostponed);
+                }
             },
             (Err(e), _, _) => {
                 return Err(BuilderError::REQWEST(e));
@@ -77,8 +83,8 @@ fn scrape_game(client: &reqwest::blocking::Client, game_info: &InternalGameInfo,
                 return Err(BuilderError::REQWEST(e));
             },
             (_, _, Err(e)) => {
-                return Err(BuilderError::REQWEST(e))
-            }
+                return Err(BuilderError::REQWEST(e));
+            },
         };
 
         let evt_doc = Document::from(event_html_data.as_ref());
@@ -104,7 +110,7 @@ fn scrape_game(client: &reqwest::blocking::Client, game_info: &InternalGameInfo,
                     5 =>    {},                                            // PN (Number of Penalties)
                     6 =>    {},                                            // PIM (Penalty Infraction Minutes)
                     13 =>   {},                                           // Shots
-                    17 if index == 0 => gb.give_aways(TeamValue::Away(stat.text().parse::<usize>().expect("Could not parse give aways for away team"))),   // GV Give aways
+                    17 if index == 0 => gb.give_aways(TeamValue::Away(stat.text().parse::<usize>().expect(&format!("Could not parse give aways for away team. Game id: {}", game_info.get_id())))),   // GV Give aways
                     17 if index == 1 => gb.give_aways(TeamValue::Home(stat.text().parse::<usize>().expect("Could not parse give aways for home team"))),
                     18 if index == 0 => gb.take_aways(TeamValue::Away(stat.text().parse::<usize>().expect("Could not parse give aways for away team"))),
                     18 if index == 1 => gb.take_aways(TeamValue::Home(stat.text().parse::<usize>().expect("Could not parse give aways for home team"))),
@@ -287,6 +293,84 @@ fn scrape_game(client: &reqwest::blocking::Client, game_info: &InternalGameInfo,
         }
 }
 
+use std::sync::mpsc::{Sender, Receiver};
+use std::sync::mpsc;
+use std::thread;
+
+pub fn scrape_game_results_threaded(games: &Vec<&InternalGameInfo>, scrape_config: &scrape_config::ScrapeConfig) -> Vec<ScrapeResults<Game>> {
+    println!("Running game scraping...");
+    use pbr::ProgressBar;
+    // returns a vector of tuple of two links, one to the game summary and one to the event summary
+    let mut result = Vec::new();
+    let mut pb = ProgressBar::new(games.len() as u64);
+    let (tx, rx): (Sender<ScrapeResults<Game>>, Receiver<ScrapeResults<Game>>) = mpsc::channel();
+    
+    let mut jobs: Vec<Vec<InternalGameInfo>> = vec![];
+    let chunks = games.chunks_exact(4);
+    let jobs_per_thread = games.len() / 4;
+    for chunk in chunks {
+        let mut v = vec![];
+        for item in chunk {
+            v.push(item.make_clone());
+        }
+        jobs.push(v);
+    }
+
+    for item in games.iter().skip(jobs_per_thread * 4) {
+        jobs[3].push(item.make_clone());
+    }
+    let mut totals_assert = 0;
+    for j in &jobs {
+        totals_assert += j.len();
+    }
+    assert_eq!(totals_assert, games.len());
+    
+    pb.format("╢▌▌░╟");
+    let mut workers = vec![];
+    for jobs_range in jobs {
+        let tx_clone = tx.clone();
+        // let games = jobs_range.clone();
+        let cfg = scrape_config.clone();
+        
+        let scraper_thread = thread::spawn(move || {
+            let client_inner = Client::new();
+            let scrape_config = cfg;
+            let t = tx_clone;
+            for game_info in jobs_range {
+                let res = scrape_game(&client_inner, &game_info, &scrape_config);
+                match res {
+                    Ok(game) => {
+                        t.send(Ok(game)).expect("Channel TX error");
+                    },
+                    Err(e) => {
+                        t.send(Err((game_info.get_id(), e))).expect("Channel TX error");
+                    }
+                }
+            }
+        });
+        workers.push(scraper_thread);
+    }
+
+    while result.len() < games.len() {
+        let item = rx.recv();
+        match item {
+            Ok(res) => {
+                result.push(res);
+            },
+            Err(e) => {
+                panic!("Channel error: {}", e);
+            }
+        }
+        pb.inc();
+    }
+    for worker in workers {
+        worker.join().expect("Thread panicked!");
+    }
+
+    pb.finish_print(format!("Done scraping game results for {} games.", games.len()).as_ref());
+    result
+}
+
 pub fn scrape_game_results(games: &Vec<&InternalGameInfo>, scrape_config: &scrape_config::ScrapeConfig) -> Vec<ScrapeResults<Game>> {
     println!("Running game scraping...");
     use pbr::ProgressBar;
@@ -294,7 +378,7 @@ pub fn scrape_game_results(games: &Vec<&InternalGameInfo>, scrape_config: &scrap
     let mut result = Vec::new();
     let client = Client::new();
     let mut pb = ProgressBar::new(games.len() as u64);
-    pb.format("╢▌▌░╟");
+    
     for game_info in games {
         let res = scrape_game(&client, &game_info, scrape_config);
         match res {
