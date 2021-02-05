@@ -82,7 +82,6 @@ fn scrape_game(client: &reqwest::blocking::Client, game_info: &InternalGameInfo,
                 if a_status == reqwest::StatusCode::OK && b_status == reqwest::StatusCode::OK && c_status == reqwest::StatusCode::OK {
                     (a.text().unwrap(), b.text().unwrap(), c.text().unwrap())
                 } else {
-                    println!("\nGame {} was postponed", game_info.get_id());
                     return Err(BuilderError::GamePostponed);
                 }
             },
@@ -323,7 +322,6 @@ pub fn scrape_game_results_threaded(games: &Vec<&InternalGameInfo>, scrape_confi
             divisor
         }
     };
-    println!("Running game scraping in {} threads", divisor);
     let mut jobs: Vec<Vec<InternalGameInfo>> = vec![];
     let chunks = games.chunks_exact(divisor);
     let jobs_per_thread = games.len() / divisor;

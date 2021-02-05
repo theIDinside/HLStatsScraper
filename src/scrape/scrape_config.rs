@@ -15,7 +15,7 @@ const DB_DIR: &'static str = "assets/db";
 
 /// Prints usage and exits (the ! means we never exit, but actually we do, by calling process::exit. This makes this function usable in match arms where we must return a value, where otherwise the compiler would
 /// call bullshit, and say we don't return a value, usable in an Err(e) arm for instance, where we don't want to panic! but we want to exit)
-fn print_usage(executable_name: &str, opts: &Options) -> ! {
+pub fn print_usage(executable_name: &str, opts: &Options) -> ! {
     let help_message = format!("Usage: {} [options]", executable_name);
     println!("{}", opts.usage(&help_message));
     std::process::exit(0);
@@ -28,7 +28,9 @@ pub fn setup_opts() -> Options {
         .optopt("g", "games", "If the season is not of standard length, pass the amount of games via this parameter (optional)", "GAMES_AMOUNT")
         .optopt("h", "help", "Help message for data stats scraper.", "This help message")
         .optopt("j", "jobs", "Set how many threads you want to use while scraping. If 'all' is provided, tool will try establishing cores on cpu and use that", "<#NUM_JOBS | all>")
-        .optopt("e", "end", "Scrape up until this date. If no date is provided, the tool will try to establish today's date.", "DATE (in the form yyyymmdd");
+        .optopt("e", "end", "Scrape up until this date. If no date is provided, the tool will try to establish today's date.", "DATE (in the form yyyymmdd")
+        .optopt("r", "test_gr", "Run benchmark with 1..NUMCPU amount of threads of game result scraping", "Amount of times per test")
+        .optopt("i", "test_gi", "Run benchmark with 1..NUMCPU amount of threads of game info scraping", "Amount of times per test");
     opts
 }
 
@@ -42,17 +44,14 @@ pub struct ScrapeConfig {
 }
 
 impl ScrapeConfig {
-    pub fn new(args_: std::env::Args) -> ScrapeConfig {
-        let args: Vec<String> = args_.collect();
-        let parameter_handler = setup_opts();
+    pub fn new(args: &Vec<String>, parameter_handler: &Options) -> ScrapeConfig {
         let matches = match parameter_handler.parse(&args[1..]) {
             Ok(m) => m,
             Err(fail) => {
-                println!("{}", fail);
+                println!("Failed \n{:?}", fail);
                 print_usage(&args[0], &parameter_handler);
             }
         };      
-        
         if matches.opt_present("h") || (matches.opt_count("d") != 1 && matches.opt_count("y") != 1) {
             print_usage(&args[0], &parameter_handler);
         }
@@ -84,10 +83,38 @@ impl ScrapeConfig {
             }
         }).unwrap_or(1);
 
-        ScrapeConfig {
+        let scrape_config = ScrapeConfig {
             root_directory: PathBuf::from(&root_dir),
             season: year.unwrap().parse::<usize>().unwrap(),
             season_length: games.unwrap_or(GAMES_IN_SEASON),
+            end_date,
+            jobs
+        };
+
+        let mut run_tests = false;
+        if matches.opt_present("r") {
+            println!("Running benchmark for game results scraping");
+            let tests_per_thread = matches.opt_str("test_gr").map(|amt| amt.parse::<usize>().unwrap_or(3)).unwrap();
+            crate::benchmark_game_result_scraping(&scrape_config, tests_per_thread);
+            run_tests = true;
+        } 
+        if matches.opt_present("i") {
+            println!("Running benchmark for game info scraping");
+            let tests_per_thread = matches.opt_str("test_gi").map(|amt| amt.parse::<usize>().unwrap_or(3)).unwrap();
+            crate::benchmark_game_info_scraping(&scrape_config, tests_per_thread);
+            run_tests = true;
+        }
+        if run_tests {
+            std::process::exit(0);
+        }
+        scrape_config
+    }
+
+    pub fn new_with_args(root_directory: PathBuf, season: usize, season_length: usize, end_date: calendar_date::CalendarDate, jobs: usize) -> ScrapeConfig {
+        ScrapeConfig {
+            root_directory,
+            season,
+            season_length,
             end_date,
             jobs
         }
@@ -95,6 +122,10 @@ impl ScrapeConfig {
 
     pub fn display_user_config(&self) {
         println!("Configuration set to: \nRoot directory {}\nSeason: {}\nGames in season: {}\nScrap until date {}\nJobs: {}", self.root_directory.display(), self.season, self.season_games_len(), self.end_date, self.jobs);
+    }
+
+    pub fn test_params(&self) -> (usize, usize, calendar_date::CalendarDate) {
+        (self.season, self.season_length, self.end_date.clone())
     }
 
     pub fn db_asset_dir(&self) -> PathBuf {

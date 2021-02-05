@@ -3,14 +3,13 @@ use super::data::gameinfo::InternalGameInfo;
 use std::io::{Read};
 use std::fs::OpenOptions;
 
-use crate::scrape::scrape_config::GAMES_IN_SEASON;
 
 pub type FileResult = Result<String, std::io::Error>;
 
 pub trait FileString {
     fn string_read(&mut self) -> FileResult;
 }
-
+#[allow()]
 pub enum GameInfoScraped {
     All(Vec<InternalGameInfo>),
     Partial(Vec<InternalGameInfo>, Option<Vec<usize>>),
