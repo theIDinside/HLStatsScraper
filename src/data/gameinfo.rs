@@ -120,12 +120,6 @@ impl InternalGameInfo {
 
     pub fn get_id(&self) -> usize { self.gid }
 
-    pub fn make_key_value_pair(gi: InternalGameInfo) -> (usize, InternalGameInfo) { (gi.get_id(), gi ) }
-
-    pub fn get_date_tuple(&self) -> (u16, u8, u8) {
-        (self.date.year, self.date.month, self.date.day)
-    }
-
     pub fn get_event_summary_url(&self, season: usize) -> String {
         format!("http://www.nhl.com/scores/htmlreports/{}{}/ES0{}.HTM", season, season + 1, self.gid - format_season_summary(season))
     }

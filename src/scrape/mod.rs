@@ -1,13 +1,15 @@
 pub mod errors;
 pub mod scrape_config;
+pub mod benchmark;
 
 pub mod export {
     pub use super::ScrapeResults;
     pub use super::scrape_game_infos;
-    pub use super::scrape_gameinfos;
     pub use super::process_results;
     pub use super::scrape_config::first_game_id_of_season;
     pub use super::scrape_config::ScrapeConfig;
+    pub use super::verify_game_infos;
+    pub use super::game_info_scrape_all_threaded;
 }
 
 
@@ -17,21 +19,17 @@ use crate::data::gameinfo::{InternalGameInfo};
 use crate::data::game::{Game, GameBuilder, TeamValue};
 use crate::data::stats::{GoalBuilder, Period, Time, GoalStrength, PowerPlay, Shots};
 use crate::data::team::{get_id};
-
+use std::fs::OpenOptions;
+use std::io::{Write, Read};
 use std::convert::TryFrom;
 use crate::scrape::errors::BuilderError;
 
 pub type ScrapeResults<T> = Result<T, (usize, BuilderError)>;
 pub type GameResult = Result<Game, BuilderError>;
 
-pub enum WorkerMessage {
-    Quit,
-    Job(Vec<usize>)
-}
-
 pub const _BASE: &'static str = "https://www.nhl.com/gamecenter/";
 pub const _VS: &'static str = "-vs-";
-
+use scrape_config::ScrapeConfig;
 use std::sync::mpsc::{Sender, Receiver};
 use std::sync::mpsc;
 use std::thread;
@@ -388,83 +386,108 @@ pub fn scrape_game_results_threaded(games: &Vec<&InternalGameInfo>, scrape_confi
     result
 }
 
-pub fn scrape_game_results(games: &Vec<&InternalGameInfo>, scrape_config: &scrape_config::ScrapeConfig) -> Vec<ScrapeResults<Game>> {
-    println!("Running game scraping...");
-    use pbr::ProgressBar;
-    // returns a vector of tuple of two links, one to the game summary and one to the event summary
-    let mut result = Vec::new();
-    let client = Client::new();
-    let mut pb = ProgressBar::new(games.len() as u64);
-    
-    for game_info in games {
-        let res = scrape_game(&client, &game_info, scrape_config);
-        match res {
-            Ok(game) => {
-                result.push(Ok(game));
-            },
-            Err(e) => {
-                result.push(Err((game_info.get_id(), e)));
-            }
-        }
-        pb.inc();
-    }
-    pb.finish_print(format!("Done scraping game results for {} games.", games.len()).as_ref());
-    result
-}
 
-pub fn scrape_gameinfos(client: &Client, game_ids: &Vec<usize>) -> Vec<ScrapeResults<InternalGameInfo>> { 
-    let count = game_ids.len() as u64;
-    let mut result = vec![];
-    for id in game_ids {
-        let url_string = format!("{}/{}", scrape_config::BASE_URL, id);
-        let r = client.get(&url_string).send();
-        if let Ok(resp) = r {
-            let url = resp.url();
-            let g_info_result = InternalGameInfo::from_url(url);
-            match g_info_result {
-                Ok(res) => {
-                    result.push(Ok(res))
-                },
-                Err(e) => {
-                    result.push(Err((*id, e)))
-                }
-            }
-        } else if let Err(e) = r {
-            result.push(Err((*id, BuilderError::from(e))));
-        }
-    }
-    result
-}
 
-pub fn scrape_game_infos(game_ids: &Vec<usize>) -> Vec<ScrapeResults<InternalGameInfo>> {
-    // Rust ranges are end-exclusive. So we have to add 1
-    use pbr::ProgressBar;
-    let count = game_ids.len() as u64;
-    let mut pb = ProgressBar::new(count);
+pub fn scrape_game_infos(scrape_config: &ScrapeConfig) -> Vec<ScrapeResults<InternalGameInfo>> {
+    let season = scrape_config.season_start();
+    let games_in_season = scrape_config.season_games_len();
+    let count = games_in_season as u64;
+    let mut pb = pbr::ProgressBar::new(count);
     pb.format("╢▌▌░╟");
-    let mut result = Vec::new();
-    let client = Client::new();
-    for id in game_ids {
-        let url_string = format!("{}/{}", scrape_config::BASE_URL, id);
-        let r = client.get(&url_string).send();
-        if let Ok(resp) = r {
-            let url = resp.url();
-            let g_info_result = InternalGameInfo::from_url(url);
-            match g_info_result {
-                Ok(res) => {
-                    result.push(Ok(res))
-                },
-                Err(e) => {
-                    result.push(Err((*id, e)))
+
+    let (tx, rx): (Sender<ScrapeResults<InternalGameInfo>>, Receiver<ScrapeResults<InternalGameInfo>>) = mpsc::channel();
+
+    println!("Scraping game info for season {} - {} games, using {} threads", season, games_in_season, scrape_config.requested_jobs());
+    // Begin scraping of all game info
+    let full_season_ids: Vec<usize> = scrape_config.season_ids_range().collect();
+    // make sure, we split it up so all chunks get processed. 
+    let jobs_size = ((full_season_ids.len() as f64) / (scrape_config.requested_jobs() as f64)).ceil() as usize;
+    let game_id_chunks: Vec<Vec<usize>> = full_season_ids.chunks(jobs_size).map(|chunk| {
+        chunk.into_iter().map(|v| *v).collect()
+    }).collect();
+
+    let mut threads = vec![];
+    for job in game_id_chunks {
+        let tx_clone = tx.clone();
+        let scraper_thread = thread::spawn(move || {
+            let client_inner = Client::new();
+            let t = tx_clone;
+            for id in job {
+                let url_string = format!("{}/{}", scrape_config::BASE_URL, id);
+                let r = client_inner.get(&url_string).send();
+                if let Ok(resp) = r {
+                    let url = resp.url();
+                    let g_info_result = InternalGameInfo::from_url(url);
+                    match g_info_result {
+                        Ok(res) => {
+                            t.send(Ok(res)).expect("Channel send error of valid scrape");
+                        },
+                        Err(e) => {
+                            t.send(Err((id, e))).expect("Channel send error of invalid scrape");
+                        }
+                    }
+                } else if let Err(e) = r {
+                    t.send(Err((id, errors::BuilderError::from(e)))).expect("Channel send error of scraping client error");
                 }
             }
-        } else if let Err(e) = r {
-            result.push(Err((*id, BuilderError::from(e))));
+        });
+        threads.push(scraper_thread);
+    }
+
+    let mut result = vec![];
+    while result.len() < count as usize {
+        let msg = rx.recv();
+        match msg {
+            Ok(item) => result.push(item),
+            Err(e) => {
+                println!("Channel error - {}", e);
+                result.push(Err((0, errors::BuilderError::ChannelError)))
+            }
         }
         pb.inc();
     }
-    pb.finish_print(format!("Done scraping game info for {} games.\n", count).as_ref());
+    pb.finish_print(format!("Done scraping game info for {} games.", count).as_ref());
+    for t in threads {
+        t.join().expect("Thread panicked");
+    }
     result
+}
+
+pub fn game_info_scrape_all_threaded(scrape_config: &ScrapeConfig) {
+    let mut result = scrape_game_infos(scrape_config);
+    let (games, _errors) = process_results(&mut result);
+    let data = serde_json::to_string(&games).unwrap();
+    let file_path = scrape_config.db_asset_dir().join("gameinfo.db");
+    let mut info_file = OpenOptions::new()
+    .read(true)
+    .write(true)
+    .create(true)
+    .open(&file_path).expect(format!("Couldn't open/create file {}", &file_path.display()).as_ref());            
+    match info_file.write_all(data.as_bytes()) {
+        Ok(_) => {
+            println!("Successfully wrote {} game infos to file {}. ({} bytes)", games.len(), &file_path.display(), data.len());
+        },
+        Err(e) => {
+            println!("Failed to write serialized data to {}. OS error message: {}", &file_path.display(), e);
+            panic!("Exiting");
+        }
+    }
+}
+
+pub fn verify_game_infos(scrape_config: &ScrapeConfig) -> Result<Vec<InternalGameInfo>, String> {
+    let mut buf = String::new();
+    let mut f_handle = 
+        OpenOptions::new().read(true).write(false).create(false).open(&scrape_config.db_asset_dir().join("gameinfo.db"))
+            .expect(format!("Couldn't open file {} for processing", scrape_config.db_asset_dir().join("gameinfo.db").display()).as_ref());
+    let _bytes_read = f_handle.read_to_string(&mut buf).expect(format!("Couldn't read contents of {}", scrape_config.db_asset_dir().join("gameinfo.db").display()).as_ref());
+    if _bytes_read == 0 {
+        panic!("Game Info DB file was empty");
+    }
+    let mut season: Vec<InternalGameInfo> = serde_json::from_str(&buf).expect("Couldn't de-serialize data from Game Info DB file");
+    season.sort_by(|a, b| a.cmp(b));
+    assert_eq!(season.len(), scrape_config.season_games_len());
+    println!("All game infos are scraped & serialized to 1 file. Begin scraping of results...");
+    Ok(season)
 }
 
 /// Returns a tuple of "ok" scrapes and error's

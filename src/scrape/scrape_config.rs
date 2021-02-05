@@ -78,7 +78,7 @@ impl ScrapeConfig {
             } else {
                 match tmp.parse::<usize>() {
                     Ok(num) => num,
-                    Err(e) => print_usage(&args[0], &parameter_handler)
+                    Err(_e) => print_usage(&args[0], &parameter_handler)
                 }
             }
         }).unwrap_or(1);
@@ -95,13 +95,13 @@ impl ScrapeConfig {
         if matches.opt_present("r") {
             println!("Running benchmark for game results scraping");
             let tests_per_thread = matches.opt_str("test_gr").map(|amt| amt.parse::<usize>().unwrap_or(3)).unwrap();
-            crate::benchmark_game_result_scraping(&scrape_config, tests_per_thread);
+            super::benchmark::benchmark_game_result_scraping(&scrape_config, tests_per_thread);
             run_tests = true;
         } 
         if matches.opt_present("i") {
             println!("Running benchmark for game info scraping");
             let tests_per_thread = matches.opt_str("test_gi").map(|amt| amt.parse::<usize>().unwrap_or(3)).unwrap();
-            crate::benchmark_game_info_scraping(&scrape_config, tests_per_thread);
+            super::benchmark::benchmark_game_info_scraping(&scrape_config, tests_per_thread);
             run_tests = true;
         }
         if run_tests {
