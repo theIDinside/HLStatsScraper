@@ -277,8 +277,5 @@ mod tests {
             assert_eq!(get_id(&team.name).unwrap(), team.id);
             assert_eq!(get_team_name(team.id).unwrap(), team.name);
         }
-
-
     }
-
 }

@@ -3,7 +3,6 @@ use super::data::gameinfo::InternalGameInfo;
 use std::io::{Read};
 use std::fs::OpenOptions;
 
-
 pub type FileResult = Result<String, std::io::Error>;
 
 pub trait FileString {

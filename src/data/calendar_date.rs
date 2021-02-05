@@ -50,12 +50,10 @@ impl PartialOrd for CalendarDate {
     }
 }
 
-
 // Used as a key in the Server.schedule hashmap. This key/hash is used to retrieve a HashSet
 // of weak references to all GameInfo objects which are played that day, defined by this key/hash
 impl CalendarDate {
     pub fn new(day: u8, month: u8, year: u16) -> CalendarDate { CalendarDate { year, month, day } }
-
     
     /// returns today's date. This must be implemented differently depending on the OS
     #[cfg(target_os = "linux")]

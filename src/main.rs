@@ -19,7 +19,6 @@ use std::time::Instant;
 
 // Threading stuff
 
-
 use data::{game::{Game, IntermediateGame}, gameinfo::{InternalGameInfo}, team::{construct_league, write_league_to_file}};
 use scrape::export::*;
 

@@ -12,8 +12,6 @@ pub mod export {
     pub use super::game_info_scrape_all_threaded;
 }
 
-
-
 use reqwest::{blocking::{Client}};
 use crate::data::gameinfo::{InternalGameInfo};
 use crate::data::game::{Game, GameBuilder, TeamValue};
@@ -300,7 +298,6 @@ fn scrape_game(client: &reqwest::blocking::Client, game_info: &InternalGameInfo,
         }
 }
 
-
 pub fn scrape_game_results_threaded(games: &Vec<&InternalGameInfo>, scrape_config: &scrape_config::ScrapeConfig) -> Vec<ScrapeResults<Game>> {
     use pbr::ProgressBar;
     // returns a vector of tuple of two links, one to the game summary and one to the event summary
@@ -385,8 +382,6 @@ pub fn scrape_game_results_threaded(games: &Vec<&InternalGameInfo>, scrape_confi
     pb.finish_print(format!("Done scraping game results for {} games.", games.len()).as_ref());
     result
 }
-
-
 
 pub fn scrape_game_infos(scrape_config: &ScrapeConfig) -> Vec<ScrapeResults<InternalGameInfo>> {
     let season = scrape_config.season_start();
