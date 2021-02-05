@@ -28,13 +28,13 @@ would look something like this:
 hockeyscraper --dir ./scraped -y 2020 --games 868 --jobs 12
 ``` 
 
-Options to pass to the command line tool. (Words within <> are parameter values to be passed)
-- Directory DIR, short form: -d <DIR> or long form --dir <DIR>
-- Season STARTYEAR, short form: -y <STARTYEAR> or long form --season <STARTYEAR>
-- Games in season GAMES, short form: -g <GAMES> or long form --games <GAMES>
-- Jobs JOBS, short form: -j <JOBS> or long form --jobs <JOBS>
-- Scrape until date <DATE>, short form: -e <DATE> or long form --end <DATE> (in the format yyyymmdd)
-- Run (simple) benchmark test of game results scraping, from 1..NUMCPUS threads, ITERATIONS times, short form: -r <ITERATIONS> or long form: --test_gr <ITERATIONS>
-- Run (simple) benchmark test of game info scraping, from 1..NUMCPUS threads, ITERATIONS times, short form: -i <ITERATIONS> or long form: --test_gi <ITERATIONS>
+Options to pass to the command line tool. (Words within () are parameter values to be passed)
+- Directory DIR, short form: -d (DIR) or long form --dir (DIR)
+- Season STARTYEAR, short form: -y (STARTYEAR) or long form --season (STARTYEAR)
+- Games in season GAMES, short form: -g (GAMES) or long form --games (GAMES)
+- Jobs JOBS, short form: -j (JOBS) or long form --jobs (JOBS)
+- Scrape until date (DATE), short form: -e (DATE) or long form --end (DATE) (in the format yyyymmdd)
+- Run (simple) benchmark test of game results scraping, from 1..NUMCPUS threads, ITERATIONS times, short form: -r (ITERATIONS) or long form: --test_gr (ITERATIONS)
+- Run (simple) benchmark test of game info scraping, from 1..NUMCPUS threads, ITERATIONS times, short form: -i (ITERATIONS) or long form: --test_gi (ITERATIONS)
 
 If the user passes either -h or --help, the tool will only display help message, regardless of what other options are passed.
