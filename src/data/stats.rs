@@ -5,13 +5,13 @@ use crate::data::team::{get_abbreviated_name};
 
 #[derive(Copy, Clone, Debug, Serialize, Deserialize)]
 pub struct Time {
-    minutes: u16,
-    seconds: u16
+    minutes: u8,
+    seconds: u8
 }
 
 impl Time {
     pub fn new(minutes: u16, seconds: u16) -> Time {
-        Time {minutes, seconds}
+        Time {minutes: minutes as u8, seconds: seconds as u8}
     }
 }
 
@@ -135,7 +135,7 @@ pub struct PowerPlays {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Goal {
     /// The nth goal scored in game (1-indexed)
-    goal_number: usize,
+    goal_number: u8,
     /// Player name
     player: String,
     /// Scoring team
@@ -149,7 +149,7 @@ pub struct Goal {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DeserializeGoal {
     /// The nth goal scored in game (1-indexed)
-    goal_number: usize,
+    goal_number: u8,
     /// Player name
     player: String,
     /// Scoring team
@@ -192,7 +192,7 @@ impl From<DeserializePeriod> for Period {
 
 impl Goal {
 
-    pub fn new_as_opt(goal_number: usize, player: String, team: String, period: Period,strength: GoalStrength) -> Option<Goal> {
+    pub fn new_as_opt(goal_number: u8, player: String, team: String, period: Period,strength: GoalStrength) -> Option<Goal> {
         Some(Goal { goal_number, player, team, period,strength })
     }
 
@@ -201,7 +201,7 @@ impl Goal {
 
 #[derive(Debug)]
 pub struct GoalBuilder {
-    goal_number: Option<usize>,
+    goal_number: Option<u8>,
     player: Option<String>,
     team: Option<usize>,
     period: Option<Period>,
@@ -215,7 +215,7 @@ impl GoalBuilder {
         }
     }
 
-    pub fn goal_number(&mut self, number: usize) { self.goal_number = Some(number); }
+    pub fn goal_number(&mut self, number: u8) { self.goal_number = Some(number); }
     pub fn player(&mut self, player: String) { self.player = Some(player); }
     pub fn team(&mut self, team: usize) { self.team = Some(team); }
     pub fn period(&mut self, period: Period) { self.period = Some(period); }

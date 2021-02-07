@@ -140,7 +140,7 @@ fn scrape_game(client: &reqwest::blocking::Client, game_info: &InternalGameInfo,
                                 match td_index {
                                     0 => {
                                         if nodestr != "-" {
-                                            goal_builder.goal_number(nodestr.parse::<usize>().expect("Could not parse goal number"))
+                                            goal_builder.goal_number(nodestr.parse::<u8>().expect("Could not parse goal number"))
                                         } else { // Means we have an unsuccessful penalty shot. Set number => 0 and handle later
                                             goal_builder.goal_number(0);
                                         }
