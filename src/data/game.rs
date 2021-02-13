@@ -29,7 +29,9 @@ pub struct IntermediateGame {
     /// S.E.
     give_aways: GiveAways,
     /// Face off win percentages
-    face_offs: FaceOffs
+    face_offs: FaceOffs,
+    // We can't make sure if a goalie was pulled in last minutes of the game, so we can only check if he _maybe_ was pulled. If a goal is scored in empty net, we can be 100% certain of course
+    goalie_probably_pulled: bool,
 }
 
 
@@ -52,7 +54,9 @@ pub struct Game {
     /// S.E.
     give_aways: GiveAways,
     /// Face off win percentages
-    face_offs: FaceOffs
+    face_offs: FaceOffs,
+    // We can't make sure if a goalie was pulled in last minutes of the game, so we can only check if he _maybe_ was pulled. If a goal is scored in empty net, we can be 100% certain of course
+    goalie_probably_pulled: bool,
 }
 
 impl From<IntermediateGame> for Game {
@@ -66,7 +70,8 @@ impl From<IntermediateGame> for Game {
             power_plays: g.power_plays,
             take_aways: g.take_aways,
             give_aways: g.give_aways,
-            face_offs: g.face_offs
+            face_offs: g.face_offs,
+            goalie_probably_pulled: g.goalie_probably_pulled,
         }
     }
 }
@@ -158,7 +163,8 @@ pub struct GameBuilder {
     power_plays:    ValueHolder<PowerPlay>,
     take_aways:     ValueHolder<usize>,
     give_aways:     ValueHolder<usize>,
-    face_offs:      ValueHolder<f32>
+    face_offs:      ValueHolder<f32>,
+    goalie_was_probably_pulled: bool
 }
 
 impl GameBuilder {
@@ -172,7 +178,8 @@ impl GameBuilder {
             power_plays:    ValueHolder { away: None, home: None },
             take_aways:     ValueHolder { away: None, home: None },
             give_aways:     ValueHolder { away: None, home: None },
-            face_offs:      ValueHolder { away: None, home: None }
+            face_offs:      ValueHolder { away: None, home: None },
+            goalie_was_probably_pulled: false,
         }
     }
 
@@ -222,6 +229,10 @@ impl GameBuilder {
         }
     }
 
+    pub fn goalie_pulled(&mut self, was_pulled: bool) {
+        self.goalie_was_probably_pulled = was_pulled;
+    }
+
     pub fn set_final_score(&mut self) {
         let home_id = self.game_info.as_ref().unwrap().get_home_team();
         let away_id = self.game_info.as_ref().unwrap().get_away_team();
@@ -267,7 +278,8 @@ impl GameBuilder {
                 power_plays,
                 take_aways,
                 give_aways,
-                face_offs
+                face_offs,
+                goalie_probably_pulled: self.goalie_was_probably_pulled
             })
         } else {
             None
