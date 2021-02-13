@@ -217,7 +217,32 @@ fn scrape_game(client: &reqwest::blocking::Client, game_info: &InternalGameInfo,
                         }
                     })
                 },
-                _ => {}
+                _ if node.text().contains("EMPTY NET") && i > 31 => {
+                    node.find(Name("tr")).enumerate().for_each(|(tr_idx, tr_node)| {
+                        if tr_node.text().trim().contains("EMPTY NET") {
+                            tr_node.find(Name("td")).enumerate().for_each(|(td_idx, td_node)| {
+                                if td_idx == 2 {
+                                    let time_pulled = td_node.text().trim().to_owned();
+                                    let (min_str, sec_str) = time_pulled.split_at(2);
+                                    let mins = min_str.parse::<u32>();
+                                    let secs = sec_str[1..].parse::<u32>();
+                                    match (mins, secs) {
+                                        (Ok(m), Ok(s)) => {
+                                            if m > 0 || s > 15 {
+                                                gb.goalie_pulled(true);
+                                            }
+                                        },
+                                        _ => {
+                                            println!("parsing of empty net time failed, of contents: {} | {} {}", time_pulled, min_str, sec_str);
+                                        }
+                                    }
+
+                                }
+                            });
+                        }
+                    })
+                },
+                _ => {} // do nothing
             }
         });
         gb.set_final_score();
@@ -381,6 +406,12 @@ pub fn scrape_game_results_threaded(games: &Vec<&InternalGameInfo>, scrape_confi
                         t.send(Ok(game)).expect("Channel TX error");
                     },
                     Err(e) => {
+                        match e {
+                            BuilderError::GamePostponed => {}
+                            _ => {
+                                println!("Error scraping: {}", e);
+                            }
+                        }
                         t.send(Err((game_info.get_id(), e))).expect("Channel TX error");
                     }
                 }

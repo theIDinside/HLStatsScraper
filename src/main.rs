@@ -119,7 +119,17 @@ fn main() {
                         println!("Scraping {} game results", refs.len());
                         let result = scrape_and_log(&refs, &scrape_config);
                         let (game_results, _errors) = scrape::process_gr_results(&result);
-                        println!("Total game results scraped: {}", &game_results.len());
+                        let postponed = _errors.iter().fold(0, |acc, item| {
+                            let (_, err) = item;
+                            match err {
+                                scrape::errors::BuilderError::GamePostponed => {
+                                    acc + 1
+                                },
+                                _ => acc
+                            }
+                        });
+                        println!("Total game results scraped: {}. Scrape errors: {} ({} soft errors, i.e. game was postponed)", &game_results.len(), _errors.len(), postponed);
+                        assert_eq!(game_results.len(), refs.len() - postponed);
                         let data = serde_json::to_string(&game_results).expect("Couldn't serialize game results data");
                         match game_results_file.write_all(data.as_bytes()) {
                             Ok(_) => {
