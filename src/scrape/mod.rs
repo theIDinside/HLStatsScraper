@@ -107,24 +107,66 @@ fn scrape_game(client: &reqwest::blocking::Client, game_info: &InternalGameInfo,
             x.clone()
         }).collect();
 
-        for (index, node) in nodes.iter().enumerate() {
-            node.find(Name("td")).enumerate().skip(1).for_each(|(i, stat)| {
+        
+
+        for (index, node) in nodes.iter().enumerate() {     
+            
+            for (i, stat) in node.find(Name("td")).enumerate().skip(1) {
                 match i {
                     // 1 if index == 0 => gb.final_score(TeamValue::Away(stat.text().parse::<usize>().expect("Couldn't parse away score"))),
                     // 1 if index == 1 => gb.final_score(TeamValue::Home(stat.text().parse::<usize>().expect("Couldn't parse away score"))),
                     5 =>    {},                                            // PN (Number of Penalties)
                     6 =>    {},                                            // PIM (Penalty Infraction Minutes)
                     13 =>   {},                                           // Shots
-                    17 if index == 0 => gb.give_aways(TeamValue::Away(stat.text().parse::<usize>().expect(&format!("Could not parse give aways for away team. Game id: {}", game_info.get_id())))),   // GV Give aways
-                    17 if index == 1 => gb.give_aways(TeamValue::Home(stat.text().parse::<usize>().expect("Could not parse give aways for home team"))),
-                    18 if index == 0 => gb.take_aways(TeamValue::Away(stat.text().parse::<usize>().expect("Could not parse give aways for away team"))),
-                    18 if index == 1 => gb.take_aways(TeamValue::Home(stat.text().parse::<usize>().expect("Could not parse give aways for home team"))),
-                    22 if index == 0 => gb.face_offs(TeamValue::Away(stat.text().parse::<f32>().expect("Couldn't parse face off value for away team"))), // Faceoff win %
-                    22 if index == 1 => gb.face_offs(TeamValue::Home(stat.text().parse::<f32>().expect("Couldn't parse face off value for home team"))),
+                    17 => {
+                        if index == 0 {
+                            if let Ok(v) = stat.text().parse::<usize>() {
+                                gb.give_aways(TeamValue::Away(v))
+                            } else {
+                                return Err(BuilderError::GamePostponed);
+                            }
+                        } else if index == 1 {
+                            if let Ok(v) = stat.text().parse::<usize>() {
+                                gb.give_aways(TeamValue::Home(v))
+                            } else {
+                                return Err(BuilderError::GamePostponed);
+                            }
+                        }
+                    },   // GV Give aways
+                    18 => {
+                        if index == 0 {
+                            if let Ok(v) = stat.text().parse::<usize>() {
+                                gb.take_aways(TeamValue::Away(v))
+                            } else {
+                                return Err(BuilderError::GamePostponed);
+                            }
+                        } else if index == 1 {
+                            if let Ok(v) = stat.text().parse::<usize>() {
+                                gb.take_aways(TeamValue::Home(v))
+                            } else {
+                                return Err(BuilderError::GamePostponed);
+                            }
+                        }
+                    } 
+                    22 => {
+                        if index == 0 {
+                            if let Ok(v) = stat.text().parse::<f32>() {
+                                gb.face_offs(TeamValue::Away(v))
+                            } else {
+                                return Err(BuilderError::GamePostponed);
+                            }
+                        } else if index == 1 {
+                            if let Ok(v) = stat.text().parse::<f32>() {
+                                gb.face_offs(TeamValue::Home(v))
+                            } else {
+                                return Err(BuilderError::GamePostponed);
+                            }
+                        }
+                    }
                     // F% Faceoff win percentage
                     _ =>    {}
-                }
-            })
+                } 
+            }
         }
      game_doc.find(gs_table_predicate).enumerate().for_each(|(i, node)| {
             match i {
@@ -192,7 +234,7 @@ fn scrape_game(client: &reqwest::blocking::Client, game_info: &InternalGameInfo,
                     });
                 },
                 41 => { // GOALTENDER SUMMARY table index
-                    node.find(Name("tr")).enumerate().for_each(|(tr_idx, tr_node)| {
+                    node.find(Name("tr")).for_each(|tr_node| {
                         let text_data = tr_node.text().trim().to_owned();
                         if text_data.contains("EMPTY NET") {
                             tr_node.find(Name("td")).enumerate().for_each(|(td_idx, td_node)| {
@@ -218,7 +260,7 @@ fn scrape_game(client: &reqwest::blocking::Client, game_info: &InternalGameInfo,
                     })
                 },
                 _ if node.text().contains("EMPTY NET") && i > 31 => {
-                    node.find(Name("tr")).enumerate().for_each(|(tr_idx, tr_node)| {
+                    node.find(Name("tr")).for_each(|tr_node| {
                         if tr_node.text().trim().contains("EMPTY NET") {
                             tr_node.find(Name("td")).enumerate().for_each(|(td_idx, td_node)| {
                                 if td_idx == 2 {

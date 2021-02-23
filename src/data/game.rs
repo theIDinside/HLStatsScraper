@@ -13,7 +13,7 @@ use crate::scrape::errors::BuilderError;
 #[derive(Debug, Serialize, Deserialize)]
 pub struct IntermediateGame {
     /// Holds game ID, home team ID, away team ID and CalendarDate for when it was played
-    game_info: InternalGameInfo,
+    pub game_info: InternalGameInfo,
     /// Scoring progression
     goals: Vec<DeserializeGoal>,
     /// Winning team's ID
@@ -38,7 +38,7 @@ pub struct IntermediateGame {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Game {
     /// Holds game ID, home team ID, away team ID and CalendarDate for when it was played
-    game_info: InternalGameInfo,
+    pub game_info: InternalGameInfo,
     /// Scoring progression
     goals: Vec<Goal>,
     /// Winning team's ID

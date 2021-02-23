@@ -25,7 +25,7 @@ impl PartialEq for GameInfo {
 pub struct InternalGameInfo {
     home:  String,
     away:  String,
-    gid:   usize,
+    pub gid:   usize,
     pub date:  CalendarDate
 }
 
